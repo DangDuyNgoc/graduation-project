@@ -1,0 +1,24 @@
+import mongoose from "mongoose";
+
+const assignmentSchema = new mongoose.Schema({
+    title: {
+        type: String,
+        required: true,
+    },
+    description: {
+        type: String,
+    },
+    dueDate: {
+        type: Date,
+        default: Date.now()
+    },
+    createdBy: {
+        type: mongoose.Types.ObjectId,
+        ref: "user",
+        required: true
+    },
+}, { timestamps: true });
+
+const assignmentModel = mongoose.model("assignment", assignmentSchema);
+
+export default assignmentModel;
