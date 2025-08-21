@@ -16,8 +16,24 @@ const courseSchema = new mongoose.Schema({
     studentIds: [
         {
             type: mongoose.Types.ObjectId,
-            refer: "user",
-            required: true
+            ref: "user",
+        }
+    ],
+    materials: [
+        {
+            title: {
+                type: String,
+            },
+            s3_url: {
+                type: String,
+            },
+            fileType: {
+                type: String, // e.g., 'image/jpeg', 'application/pdf'
+            },
+            uploadedAt: {
+                type: Date,
+                default: Date.now(),
+            }
         }
     ]
 }, { timestamps: true });

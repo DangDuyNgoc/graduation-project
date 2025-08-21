@@ -12,6 +12,8 @@ import productRouter from "./routes/productRoute.js";
 import cartRouter from "./routes/cartRoute.js";
 import categoryRoute from "./routes/categoryRoute.js";
 import subCategoryRoute from "./routes/subCategoryRoute.js";
+import courseRoute from "./routes/courseRoute.js";
+import assignmentRoute from "./routes/assignmentRoute.js";
 
 dotenv.config();
 
@@ -38,8 +40,8 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 8080;
 
 app.use("/api/user", userRouter);
-app.use("/api/product", productRouter);
-app.use("/api/category", categoryRoute);
+app.use("/api/course", courseRoute);
+app.use("/api/assignment", assignmentRoute);
 app.use("/api/sub-category", subCategoryRoute);
 app.use("/api/cart", cartRouter);
 

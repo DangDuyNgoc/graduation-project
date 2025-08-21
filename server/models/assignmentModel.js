@@ -17,6 +17,11 @@ const assignmentSchema = new mongoose.Schema({
         ref: "user",
         required: true
     },
+    courseId: {
+        type: mongoose.Types.ObjectId,
+        ref: "course",
+        required: true
+    }
 }, { timestamps: true });
 
 const assignmentModel = mongoose.model("assignment", assignmentSchema);

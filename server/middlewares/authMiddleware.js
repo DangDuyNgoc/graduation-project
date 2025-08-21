@@ -47,7 +47,7 @@ export const isAuthenticated = async (req, res, next) => {
     }
 };
 
-export const isAdmin = async (req, res, next) => {
+export const isTeacher = async (req, res, next) => {
     try {
         const user = await userModel.findById(req.user?._id);
         if (user?.role === "STUDENT") {

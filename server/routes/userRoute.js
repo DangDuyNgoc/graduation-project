@@ -12,14 +12,14 @@ import {
     verifyOtpController
 } from '../controllers/authController.js';
 import { isAuthenticated } from '../middlewares/authMiddleware.js';
-import upload from '../config/multer.js';
+import uploadImage from '../middlewares/uploadImage.js';
 
 const userRouter = express.Router();
 
 userRouter.post("/registration", registrationController);
 userRouter.post("/login", loginController);
 userRouter.get("/logout", logoutController);
-userRouter.post("/upload-avatar", isAuthenticated, upload.single("avatar"), uploadAvatarController);
+userRouter.post("/upload-avatar", isAuthenticated, uploadImage.single("avatar"), uploadAvatarController);
 userRouter.post("/update-user", isAuthenticated, updateUserController);
 userRouter.post("/request-password-reset", requestResetPasswordController);
 userRouter.post("/verify-otp", verifyOtpController);
