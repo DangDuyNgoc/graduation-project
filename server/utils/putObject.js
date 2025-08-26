@@ -1,5 +1,5 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { s3Client } from "./s3Credential";
+import { s3Client } from "./s3Credential.js";
 
 export const putObject = async (file, fileName, mimetype) => {
     try {
@@ -18,7 +18,6 @@ export const putObject = async (file, fileName, mimetype) => {
         }
 
         let url = `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${params.Key}`;
-        console.log("File uploaded successfully:", url);
         return { url, key: params.Key };
     } catch (error) {
         console.error("Error uploading file to S3:", error);

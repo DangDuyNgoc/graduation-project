@@ -27,6 +27,9 @@ const courseSchema = new mongoose.Schema({
             s3_url: {
                 type: String,
             },
+            key: {
+                type: String, // S3 object key
+            },
             fileType: {
                 type: String, // e.g., 'image/jpeg', 'application/pdf'
             },

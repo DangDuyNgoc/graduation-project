@@ -15,8 +15,8 @@ const __dirname = path.dirname(__filename);
 
 export const registrationController = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
-        if (!name || !email || !password) {
+        const { name, email, password, role } = req.body;
+        if (!name || !email || !password, !role) {
             return res.status(400).send({
                 success: false,
                 message: "All fields are required"
@@ -37,7 +37,7 @@ export const registrationController = async (req, res) => {
 
         // create new user
         const newUser = await userModel.create({
-            name, email, password: hashedPassword
+            name, email, password: hashedPassword, role
         });
 
         const accessToken = createAccessToken(newUser._id);
