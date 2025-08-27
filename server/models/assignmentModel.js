@@ -12,6 +12,26 @@ const assignmentSchema = new mongoose.Schema({
         type: Date,
         default: Date.now()
     },
+    materials: [
+        {
+            title: {
+                type: String
+            },
+            s3_url: {
+                type: String,
+            },
+            key: {
+                type: String,
+            },
+            fileType: {
+                type: String,
+            },
+            uploadedAt: {
+                type: Date,
+                default: Date.now(),
+            }
+        }
+    ],
     createdBy: {
         type: mongoose.Types.ObjectId,
         ref: "user",
