@@ -33,7 +33,7 @@ assignmentRoute.delete("/delete-assignment/:id",
     isTeacher,
     deleteAssignmentController
 );
-assignmentRoute.delete("/delete-one-assignment-material/",
+assignmentRoute.delete("/delete-one-assignment-material",
     isAuthenticated,
     isTeacher,
     deleteOneAssignmentMaterialController

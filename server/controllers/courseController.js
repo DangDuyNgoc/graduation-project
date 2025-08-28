@@ -189,13 +189,21 @@ export const deleteCourseController = async (req, res) => {
             })
         };
 
-        const course = await courseModel.findByIdAndDelete(id);
+        const course = await courseModel.findById(id);
         if (!course) {
             return res.status(404).send({
                 success: false,
                 message: "Course not found",
             })
         };
+
+        // delete materials from S3
+        if (course.materials && course.materials.length > 0) {
+            const materialKey = course.materials.map(mat => mat.key);
+            await deleteObjects(materialKey);
+        };
+
+        await courseModel.findByIdAndDelete(id);
 
         return res.status(200).send({
             success: true,

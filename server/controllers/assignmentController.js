@@ -1,6 +1,6 @@
 import assignmentModel from "../models/assignmentModel.js";
 import courseModel from "../models/courseModel.js";
-import { deleteObjects } from "../utils/deleteObject.js";
+import { deleteObjects, deleteOneObject } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
 
 export const createAssignmentController = async (req, res) => {
@@ -239,7 +239,7 @@ export const deleteAssignmentController = async (req, res) => {
             })
         };
 
-        const assignment = await assignmentModel.findByIdAndDelete(id);
+        const assignment = await assignmentModel.findById(id);
 
         if (!assignment) {
             return res.status(404).send({
@@ -247,6 +247,14 @@ export const deleteAssignmentController = async (req, res) => {
                 message: "Assignment not found"
             })
         };
+
+        // delete all materials from s3
+        if (assignment.materials && assignment.materials.length > 0) {
+            const materialKeys = assignment.materials.map(mat => mat.key);
+            await deleteObjects(materialKeys);
+        }
+
+        await assignmentModel.findByIdAndDelete(id);
 
         res.status(200).send({
             success: true,
@@ -291,7 +299,7 @@ export const deleteOneAssignmentMaterialController = async (req, res) => {
         };
 
         // delete material from s3
-        await deleteObjects(materialKey);
+        await deleteOneObject(materialKey);
 
         // remove material from assignment 
         assignment.materials.splice(materialIndex, 1);
