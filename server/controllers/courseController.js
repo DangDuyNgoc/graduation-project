@@ -1,4 +1,5 @@
 import courseModel from "../models/courseModel.js";
+import materialsModel from "../models/materialModel.js";
 import userModel from "../models/userModel.js";
 import { deleteObjects, deleteOneObject } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
@@ -14,24 +15,6 @@ export const createCourseController = async (req, res) => {
             })
         };
 
-        // upload course to S3
-        let materials = [];
-        if (req.files && req.files.length > 0) {
-            const uploadPromises = req.files.map(async (file) => {
-                const fileName = `courses/${Date.now()}_${file.originalname}`;
-                const { url } = await putObject(file.buffer, fileName, file.mimetype);
-
-                return {
-                    title: file.originalname,
-                    s3_url: url,
-                    key: fileName, // S3 object key
-                    fileType: file.mimetype,
-                }
-            });
-
-            materials = await Promise.all(uploadPromises);
-        }
-
         const course = new courseModel({
             name,
             description,
@@ -40,6 +23,33 @@ export const createCourseController = async (req, res) => {
         });
 
         await course.save();
+
+        // upload course to S3
+        if (req.files && req.files.length > 0) {
+            const uploadPromises = req.files.map(async (file) => {
+                const fileName = `courses/${Date.now()}_${file.originalname}`;
+                const { url } = await putObject(file.buffer, fileName, file.mimetype);
+
+                const material = new materialsModel({
+                    courseId: course._id,
+                    title: file.originalname,
+                    s3_url: url,
+                    key: fileName, // S3 object key
+                    fileType: file.mimetype,
+                });
+
+                await material.save();
+
+                return material._id;
+            });
+
+            const materialIds = await Promise.all(uploadPromises);
+
+            // push material into course
+            course.materials.push(...materialIds);
+
+            await course.save();
+        }
 
         return res.status(200).send({
             success: true,
@@ -66,7 +76,9 @@ export const getCourseController = async (req, res) => {
             })
         };
 
-        const course = await courseModel.findById(id).populate("teacherId");
+        const course = await courseModel.findById(id)
+            .populate("teacherId")
+            .populate("materials");
 
         if (!course) {
             return res.status(404).send({
@@ -93,7 +105,8 @@ export const getAllCourseController = async (req, res) => {
     try {
         const course = await courseModel.find({})
             .sort({ createdAt: -1 })
-            .populate("teacherId");
+            .populate("teacherId")
+            .populate("materials");
 
         return res.status(200).send({
             success: true,
@@ -133,25 +146,6 @@ export const updateCourseController = async (req, res) => {
         if (name) updateData.name = name;
         if (description) updateData.description = description;
 
-        // upload new materials if provided
-        if (req.files && req.files.length > 0) {
-            const uploadPromises = req.files.map(async (file) => {
-                const fileName = `courses/${Date.now()}_${file.originalname}`;
-                const { url } = await putObject(file.buffer, fileName, file.mimetype);
-
-                return {
-                    title: file.originalname,
-                    s3_url: url,
-                    fileType: file.mimetype,
-                }
-            });
-
-            const materials = await Promise.all(uploadPromises);
-
-            // Update the course with new materials
-            updateData.$push = { materials: { $each: materials } };
-        }
-
         const course = await courseModel.findByIdAndUpdate(
             id,
             updateData,
@@ -161,6 +155,29 @@ export const updateCourseController = async (req, res) => {
                 success: false,
                 message: "Course not found",
             })
+        };
+
+        // upload new materials if provided
+        if (req.files && req.files.length > 0) {
+            const uploadPromises = req.files.map(async (file) => {
+                const fileName = `courses/${Date.now()}_${file.originalname}`;
+                const { url } = await putObject(file.buffer, fileName, file.mimetype);
+
+                const material = new materialsModel({
+                    courseId: course._id,
+                    title: file.originalname,
+                    s3_url: url,
+                    fileType: file.mimetype,
+                })
+
+                await material.save();
+                return materials._id;
+            });
+
+            const materials = await Promise.all(uploadPromises);
+            course.materials.push(...materials);
+
+            await course.save();
         };
 
         return res.status(200).send({
@@ -189,7 +206,7 @@ export const deleteCourseController = async (req, res) => {
             })
         };
 
-        const course = await courseModel.findById(id);
+        const course = await courseModel.findById(id).populate("materials");
         if (!course) {
             return res.status(404).send({
                 success: false,
@@ -201,6 +218,7 @@ export const deleteCourseController = async (req, res) => {
         if (course.materials && course.materials.length > 0) {
             const materialKey = course.materials.map(mat => mat.key);
             await deleteObjects(materialKey);
+            await materialsModel.deleteMany({ courseId: id });
         };
 
         await courseModel.findByIdAndDelete(id);
@@ -229,7 +247,7 @@ export const deleteCourseMaterialsController = async (req, res) => {
             })
         };
 
-        const course = await courseModel.findById(id);
+        const course = await courseModel.findById(id).populate("materials");
         if (!course) {
             return res.status(404).send({
                 success: false,
@@ -238,7 +256,7 @@ export const deleteCourseMaterialsController = async (req, res) => {
         };
 
         // Check if the course has materials to delete
-        if (!course.materials || course.materials.length === 0) {
+        if (course.materials.length === 0) {
             return res.status(400).send({
                 success: false,
                 message: "No materials to delete for this course"
@@ -247,10 +265,12 @@ export const deleteCourseMaterialsController = async (req, res) => {
 
         // delete materials from S3
         await deleteObjects(course.materials.map(material => material.key));
+        await materialsModel.deleteMany({ courseId: id });
 
         // remove materials from course
         course.materials = [];
         await course.save();
+
         return res.status(200).send({
             success: true,
             message: "Deleted course materials successfully",
@@ -267,16 +287,16 @@ export const deleteCourseMaterialsController = async (req, res) => {
 // delete one material of a course
 export const deleteOneCourseMaterialController = async (req, res) => {
     try {
-        const { courseId, materialKey } = req.body;
+        const { courseId, materialKey, materialId } = req.body;
 
-        if (!courseId || !materialKey) {
+        if (!courseId || !materialKey || !materialId) {
             return res.status(400).send({
                 success: false,
-                message: "Please provide course ID and material key"
+                message: "Please provide course ID, material key and material ID"
             });
         };
 
-        const course = await courseModel.findById(courseId);
+        const course = await courseModel.findById(courseId).populate("materials");
         if (!course) {
             return res.status(404).send({
                 success: false,
@@ -285,8 +305,8 @@ export const deleteOneCourseMaterialController = async (req, res) => {
         };
 
         // find the material to delete
-        const materialIndex = course.materials.findIndex(m => m.key === materialKey);
-        if (materialIndex === -1) {
+        const material = await materialsModel.findById(materialId);
+        if (!material) {
             return res.status(404).send({
                 success: false,
                 message: "Material not found in this course",
@@ -295,9 +315,10 @@ export const deleteOneCourseMaterialController = async (req, res) => {
 
         // delete the material from S3
         await deleteOneObject(materialKey);
+        await materialsModel.findByIdAndDelete(materialId);
 
         // remove the material from the course
-        course.materials.splice(materialIndex, 1);
+        course.materials.pull(materialId);
         await course.save();
 
         return res.status(200).send({

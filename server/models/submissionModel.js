@@ -11,10 +11,12 @@ const submissionSchema = new mongoose.Schema({
         ref: "assignment",
         index: true,
     },
-    fileUrl: {
-        type: String,
-        required: true
-    },
+    fileUrls: [
+        {
+            type: String,
+            required: true
+        },
+    ],
     contentHash: {
         type: String, // SHA-256 of content
     },

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import materialsMode from "./materialModel";
 
 const courseSchema = new mongoose.Schema({
     name: {
@@ -21,22 +22,8 @@ const courseSchema = new mongoose.Schema({
     ],
     materials: [
         {
-            title: {
-                type: String,
-            },
-            s3_url: {
-                type: String,
-            },
-            key: {
-                type: String, // S3 object key
-            },
-            fileType: {
-                type: String, // e.g., 'image/jpeg', 'application/pdf'
-            },
-            uploadedAt: {
-                type: Date,
-                default: Date.now(),
-            }
+            type: mongoose.Types.ObjectId,
+            ref: "material",
         }
     ]
 }, { timestamps: true });
