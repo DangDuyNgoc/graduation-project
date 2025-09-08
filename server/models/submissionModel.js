@@ -8,7 +8,7 @@ const submissionSchema = new mongoose.Schema({
     },
     assignment: {
         type: mongoose.Types.ObjectId,
-        ref: "assignment",
+        ref: "assignment", 
         index: true,
     },
     fileUrls: [
@@ -28,6 +28,14 @@ const submissionSchema = new mongoose.Schema({
     },
     blockchainTxHash: {
         type: String // hash of transaction and save on the blockchain
+    },
+    isLate: {
+        type: Boolean,
+        default: false,
+    },
+    lateDuration: {
+        type: Number,
+        default: 0
     },
     submittedAt: {
         type: Date,

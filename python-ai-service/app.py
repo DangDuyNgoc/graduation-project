@@ -9,7 +9,13 @@ import docx
 import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-app = Flask()
+app = Flask(__name__)
+
+# MongoDB connection
+client = MongoClient("mongodb+srv://ductv21it:tranduc2002@cluster0.jidqxdo.mongodb.net/Blinkit")
+db = client["Blinkit"]
+submissions = db["submissions"]
+
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
 def download_file(url): 
@@ -17,7 +23,7 @@ def download_file(url):
     if resp.status_code != 200:
         raise Exception("Failed to download file")
 
-    # lấy extension từ URL (vd: .pdf, .docx)
+    # get extension from URL (ex: .pdf, .docx)
     _, ext = os.path.splitext(url)
     tmp_file = te.NamedTemporaryFile(delete=False, suffix=ext)
     tmp_file.write(resp.content)
@@ -47,27 +53,48 @@ def recursive_chunk(text, chunk_size = 500, chunk_overlap = 50):
 
     return splitter.split_text(text)
 
+@app.route("/process_submission/<submission_id>", methods =["POST"])
+def process_submission(submission_id):
+
+    doc = submissions.find_one({"_id": ObjectId(submission_id)})
+    if not doc: 
+        return jsonify({"error": "Submission not found"}), 404
+    
+
+    file_url= doc.get("fileUrls", [])
+    if not file_url: 
+        return jsonify({"error": "No files in submission"}), 400
+    
+    results = []
+
+    for file_url in file_url: 
+        try: 
+            # Download + extract
+            local_path = download_file(file_url)
+            text = extract_text(local_path)
+
+            # Chunk
+            chunks = recursive_chunk(text, chunk_size=500, chunk_overlap=50)
+
+            # Embeddings
+            embeddings = model.encode(chunks, convert_to_numpy=True)
+
+            results.append({
+                "fileUrls": file_url,
+                "numChunks": len(chunks),
+                "embeddingShape": embeddings.shape,
+            })
+            os.unlink(local_path)
+        except Exception as e:
+            results.append({
+                "fileUrl": file_url,
+                "error": str(e)
+            })
+
+    return jsonify({
+        "submissionId": submission_id,
+        "results": results
+    })
+
 if __name__ == "__main__":
-    file_url = "https://my-graduation-thesis.s3.ap-southeast-2.amazonaws.com/courses/1756128812914_project.pdf"
-
-    local_path = download_file(file_url)
-    print(f"Downloaded file to {local_path}")
-
-    text = extract_text(local_path)
-    print(f"Extracted text length: {len(text)} characters")
-    print(f"Extracted text preview: {text[:500]}...")
-
-    # recursive chunking
-    chunks = recursive_chunk(text, chunk_size=500, chunk_overlap=50)
-    for i, chunk in enumerate(chunks):
-        print(f"\n------ Chunk {i+1} ------")
-        print(chunk)
-        print(f"(Length: {len(chunk)} characters)")
-    print(f"Number of chunks: {len(chunks)}")
-    print(f"First chunk preview: {chunks[0][:500]}...")
-
-    embeddings = model.encode(chunks, convert_to_numpy=True)
-    print(f"Embeddings shape: {embeddings.shape}")
-    print(f"Embedding dimension: {len(embeddings)}")
-
-    os.unlink(local_path)
+    app.run(port=5000, debug=True)

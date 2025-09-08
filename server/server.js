@@ -10,6 +10,7 @@ import connectDB from "./config/db.js";
 import userRouter from "./routes/userRoute.js";
 import courseRoute from "./routes/courseRoute.js";
 import assignmentRoute from "./routes/assignmentRoute.js";
+import submissionRoute from "./routes/submissionRoute.js";
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ const PORT = process.env.PORT || 8080;
 app.use("/api/user", userRouter);
 app.use("/api/course", courseRoute);
 app.use("/api/assignment", assignmentRoute);
+app.use("/api/submission", submissionRoute);
 
 app.listen(PORT, () => {
     console.log(`Server in running on ${process.env.DEV_MODE} mode on port ${PORT}`.bgCyan.white);

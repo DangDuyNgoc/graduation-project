@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import materialsMode from "./materialModel";
 
 const courseSchema = new mongoose.Schema({
     name: {

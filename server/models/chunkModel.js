@@ -9,7 +9,12 @@ const chunksSchema = new mongoose.Schema({
     materialId: {
         type: mongoose.Types.ObjectId,
         ref: "material",
-        required: true
+        default: null,
+    },
+    submissionId: {
+        type: mongoose.Types.ObjectId,
+        ref: "submission",
+        default: null,
     },
     text: {
         type: String,
@@ -22,6 +27,10 @@ const chunksSchema = new mongoose.Schema({
     chunkIndex: {
         type: Number,
         required: true
+    },
+    faissId: {
+        type: Number, // mapping to FAISS index
+        index: true
     },
     createdAt: {
         type: Date,

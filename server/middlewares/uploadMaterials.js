@@ -16,6 +16,7 @@ const uploadMaterials = multer({
             "image/jpeg",
             "image/png",
             "image/webp",
+            "application/octet-stream"
         ];
 
         if (!allowedTypes.includes(file.mimetype)) {

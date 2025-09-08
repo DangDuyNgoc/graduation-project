@@ -12,6 +12,10 @@ const assignmentSchema = new mongoose.Schema({
         type: Date,
         default: Date.now()
     },
+    allowLateSubmission: {
+        type: Boolean,
+        default: false
+    },
     materials: [
         {
             title: {
