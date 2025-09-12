@@ -8,6 +8,10 @@ import pdfplumber
 import docx
 import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from sentence_transformers import SentenceTransformer
+from datetime import datetime
+import faiss
+import numpy as np
 
 app = Flask(__name__)
 
@@ -15,8 +19,20 @@ app = Flask(__name__)
 client = MongoClient("mongodb+srv://ductv21it:tranduc2002@cluster0.jidqxdo.mongodb.net/Blinkit")
 db = client["Blinkit"]
 submissions = db["submissions"]
+materials = db["materials"]
+chunks_col = db["chunks"]
 
 model = SentenceTransformer("all-MiniLM-L6-v2")
+dimension = 384
+
+# FAISS Index
+index_file = "faiss_store.index"
+if os.path.exists(index_file): 
+    faiss_index = faiss.read_index(index_file)
+    print("Loaded FAISS index from file")
+else:
+    faiss_index = faiss.IndexFlatL2(dimension)
+    print("Created new FAISS index")
 
 def download_file(url): 
     resp = requests.get(url)
@@ -53,6 +69,14 @@ def recursive_chunk(text, chunk_size = 500, chunk_overlap = 50):
 
     return splitter.split_text(text)
 
+# api processing of material
+@app.route("/process_material/<material_id>", methods=["POST"])
+def process_material(material_id):
+    doc = materials.find_one({"_id": ObjectId(material_id)})
+    if not doc:
+        return jsonify({"error": "Submission not found"}), 404
+    # file_url: 
+
 @app.route("/process_submission/<submission_id>", methods =["POST"])
 def process_submission(submission_id):
 
@@ -78,6 +102,25 @@ def process_submission(submission_id):
 
             # Embeddings
             embeddings = model.encode(chunks, convert_to_numpy=True)
+
+            # Add to FAISS
+            start_id = faiss_index.ntotal
+            faiss_index.add(np.array(embeddings))
+
+            # Saving FAISS into file
+            faiss.write_index(faiss_index, index_file)
+
+            # Save into DB
+            for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+                faiss_id = start_id + idx
+                chunks_col.insert_one({
+                    "submmissionId": ObjectId(submission_id),
+                    "text": chunk_text,
+                    "embedding": embedding.tolist(),
+                    "chunkIndex": idx,
+                    "faissId": faiss_id,
+                    "createdAt": datetime.utcnow()
+                })
 
             results.append({
                 "fileUrls": file_url,

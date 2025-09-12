@@ -1,0 +1,9 @@
+flask
+pymongo
+bson
+requests
+pdfplumber
+python-docx
+sentence-transformers
+langchain
+faiss-cpu

@@ -15,11 +15,10 @@ export const createCourseController = async (req, res) => {
             })
         };
 
-        const course = new courseModel({
+        let course = new courseModel({
             name,
             description,
             teacherId: req.user._id,
-            materials,
         });
 
         await course.save();
@@ -51,11 +50,16 @@ export const createCourseController = async (req, res) => {
             await course.save();
         }
 
+        // populate before sending request
+        course = await courseModel.findById(course._id)
+            .populate("teacherId")
+            .populate("materials");
+
         return res.status(200).send({
             success: true,
             message: "Create Course Successfully",
             course: course
-        })
+        });
     } catch (error) {
         console.log("Error in create course: ", error);
         return res.status(500).send({
@@ -167,15 +171,16 @@ export const updateCourseController = async (req, res) => {
                     courseId: course._id,
                     title: file.originalname,
                     s3_url: url,
+                    key: fileName,
                     fileType: file.mimetype,
                 })
 
                 await material.save();
-                return materials._id;
+                return material._id;
             });
 
-            const materials = await Promise.all(uploadPromises);
-            course.materials.push(...materials);
+            const materialIds = await Promise.all(uploadPromises);
+            course.materials.push(...materialIds);
 
             await course.save();
         };
@@ -216,7 +221,10 @@ export const deleteCourseController = async (req, res) => {
 
         // delete materials from S3
         if (course.materials && course.materials.length > 0) {
-            const materialKey = course.materials.map(mat => mat.key);
+            const materialKey = course.materials.map(mat => mat.key)
+                .filter(key => typeof key === "string" && key.length > 0);
+
+            console.log("Keys gửi lên S3 để xóa:", materialKey);
             await deleteObjects(materialKey);
             await materialsModel.deleteMany({ courseId: id });
         };
@@ -328,6 +336,45 @@ export const deleteOneCourseMaterialController = async (req, res) => {
         });
     } catch (error) {
         console.log("Error in delete one course material: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+// delete all course 
+export const deleteAllCourseController = async (req, res) => {
+    try {
+        const course = await courseModel.find({})
+            .populate("teacherId")
+            .populate("materials")
+
+        if (!course) {
+            return res.status(400).send({
+                success: false,
+                message: "Course not found",
+            });
+        };
+
+        const allMaterials = await materialsModel.find({});
+        const allKeys = allMaterials.map(mat => mat.key);
+
+        if (allKeys.length > 0) {
+            await deleteObjects(allKeys);
+        };
+
+        await materialsModel.deleteMany({});
+
+        await courseModel.deleteMany({});
+
+        return res.status(200).send({
+            success: true,
+            message: "Deleted all course successfully",
+            course
+        });
+    } catch (error) {
+        console.log("Error in delete all course: ", error);
         return res.status(500).send({
             success: false,
             message: "Internal server error"

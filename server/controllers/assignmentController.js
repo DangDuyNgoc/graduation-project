@@ -269,7 +269,7 @@ export const deleteAssignmentController = async (req, res) => {
     }
 };
 
-// delete assignment material
+// delete one assignment material
 export const deleteOneAssignmentMaterialController = async (req, res) => {
     try {
         const { assignmentId, materialKey } = req.body;
