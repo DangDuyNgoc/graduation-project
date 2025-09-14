@@ -12,6 +12,7 @@
   "description": "",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.864.0",
+    "axios": "^1.12.1",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.7.0",
     "colors": "^1.4.0",

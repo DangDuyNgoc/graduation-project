@@ -1,3 +1,4 @@
+import axios from "axios";
 import courseModel from "../models/courseModel.js";
 import materialsModel from "../models/materialModel.js";
 import userModel from "../models/userModel.js";
@@ -38,6 +39,16 @@ export const createCourseController = async (req, res) => {
                 });
 
                 await material.save();
+
+                // call flask api to processing embedding 
+                try {
+                    const flaskRes = await axios.post(
+                        `http://localhost:5000/process_material/${material._id}`,
+                    );
+                    // console.log("Flask processing result:", flaskRes.data);
+                } catch (error) {
+                    console.error("Error calling Flask API:", error.response?.data || error.message);
+                };
 
                 return material._id;
             });
@@ -176,6 +187,17 @@ export const updateCourseController = async (req, res) => {
                 })
 
                 await material.save();
+
+                // call flask api to processing embedding 
+                try {
+                    const flaskRes = await axios.post(
+                        `http://localhost:5000/process_material/${material._id}`,
+                    );
+                    console.log("Flask processing result:", flaskRes.data);
+                } catch (error) {
+                    console.error("Error calling Flask API:", error.response?.data || error.message);
+                };
+
                 return material._id;
             });
 
@@ -219,12 +241,18 @@ export const deleteCourseController = async (req, res) => {
             })
         };
 
+        // call flask api 
+        try {
+            await axios.delete(`http://localhost:5000/delete_course/${id}`)
+        } catch (error) {
+            console.error("Error calling Flask API:", error.response?.data || error.message);
+        }
+
         // delete materials from S3
         if (course.materials && course.materials.length > 0) {
             const materialKey = course.materials.map(mat => mat.key)
                 .filter(key => typeof key === "string" && key.length > 0);
 
-            console.log("Keys gửi lên S3 để xóa:", materialKey);
             await deleteObjects(materialKey);
             await materialsModel.deleteMany({ courseId: id });
         };
@@ -269,6 +297,13 @@ export const deleteCourseMaterialsController = async (req, res) => {
                 success: false,
                 message: "No materials to delete for this course"
             });
+        }
+
+        // call flask api
+        try {
+            await axios.delete(`http://localhost:5000/delete_course/${id}`)
+        } catch (error) {
+            console.error("Error calling Flask API:", error.response?.data || error.message);
         }
 
         // delete materials from S3
@@ -325,6 +360,13 @@ export const deleteOneCourseMaterialController = async (req, res) => {
         await deleteOneObject(materialKey);
         await materialsModel.findByIdAndDelete(materialId);
 
+        // call flask api
+        try {
+            await axios.delete(`http://localhost:5000/delete_material/${materialId}`)
+        } catch (error) {
+            console.error("Error calling Flask API:", error.response?.data || error.message);
+        }
+
         // remove the material from the course
         course.materials.pull(materialId);
         await course.save();
@@ -364,6 +406,15 @@ export const deleteAllCourseController = async (req, res) => {
             await deleteObjects(allKeys);
         };
 
+        // call flask api
+        try {
+            for (const mat of allMaterials) {
+                await axios.delete(`http://localhost:5000/delete_material/${mat._id}`)
+            }
+        } catch (error) {
+            console.error("Error calling Flask API:", error.response?.data || error.message);
+        }
+
         await materialsModel.deleteMany({});
 
         await courseModel.deleteMany({});
@@ -371,7 +422,6 @@ export const deleteAllCourseController = async (req, res) => {
         return res.status(200).send({
             success: true,
             message: "Deleted all course successfully",
-            course
         });
     } catch (error) {
         console.log("Error in delete all course: ", error);
