@@ -4,6 +4,14 @@ const materialsSchema = new mongoose.Schema({
     courseId: {
         type: mongoose.Types.ObjectId,
         ref: "course",
+    },
+    submissionId: {
+        type: mongoose.Types.ObjectId,
+        ref: "submission",
+    },
+    ownerType: {
+        type: String,
+        enum: ["courseMaterial", "submissionMaterial"],
         required: true
     },
     title: {
@@ -20,7 +28,7 @@ const materialsSchema = new mongoose.Schema({
     },
     uploadedAt: {
         type: Date,
-        default: Date.now(),
+        default: Date.now,
     },
     processingStatus: {
         type: String,

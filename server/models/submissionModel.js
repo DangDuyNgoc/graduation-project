@@ -8,14 +8,14 @@ const submissionSchema = new mongoose.Schema({
     },
     assignment: {
         type: mongoose.Types.ObjectId,
-        ref: "assignment", 
+        ref: "assignment",
         index: true,
     },
-    fileUrls: [
+    materials: [
         {
-            type: String,
-            required: true
-        },
+            type: mongoose.Types.ObjectId,
+            ref: "material",
+        }
     ],
     contentHash: {
         type: String, // SHA-256 of content
@@ -39,7 +39,7 @@ const submissionSchema = new mongoose.Schema({
     },
     submittedAt: {
         type: Date,
-        default: Date.now()
+        default: Date.now
     }
 }, { timestamps: true });
 

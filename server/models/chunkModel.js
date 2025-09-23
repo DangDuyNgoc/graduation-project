@@ -4,7 +4,7 @@ const chunksSchema = new mongoose.Schema({
     courseId: {
         type: mongoose.Types.ObjectId,
         ref: "course",
-        required: true
+        default: null,
     },
     materialId: {
         type: mongoose.Types.ObjectId,
@@ -34,7 +34,7 @@ const chunksSchema = new mongoose.Schema({
     },
     createdAt: {
         type: Date,
-        default: Date.now()
+        default: Date.now
     }
 });
 

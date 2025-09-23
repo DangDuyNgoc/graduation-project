@@ -1,11 +1,20 @@
 import assignmentModel from "../models/assignmentModel.js";
 import courseModel from "../models/courseModel.js";
+import materialsModel from "../models/materialModel.js";
+import submissionModel from "../models/submissionModel.js";
 import { deleteObjects, deleteOneObject } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
 
 export const createAssignmentController = async (req, res) => {
     try {
-        const { courseId, title, description, dueDate } = req.body;
+        const {
+            courseId,
+            title,
+            description,
+            dueDate,
+            allowLateSubmission,
+            lateSubmissionDuration
+        } = req.body;
 
         if (!title || !dueDate) {
             return res.status(400).send({
@@ -47,6 +56,8 @@ export const createAssignmentController = async (req, res) => {
             title,
             description,
             dueDate,
+            allowLateSubmission: allowLateSubmission || false,
+            lateSubmissionDuration: allowLateSubmission ? (lateSubmissionDuration || 24) : 0,
             materials
         });
 
@@ -105,7 +116,7 @@ export const getAssignmentByCourseController = async (req, res) => {
 
 export const getAssignmentController = async (req, res) => {
     try {
-        const { id } = req.params;
+        const { id } = req.params; // assignment id
 
         if (!id) {
             return res.status(400).send({
@@ -162,7 +173,13 @@ export const getAllAssignmentController = async (req, res) => {
 export const updateAssignmentController = async (req, res) => {
     try {
         const { id } = req.params;
-        const { title, description, dueDate } = req.body;
+        const {
+            title,
+            description,
+            dueDate,
+            allowLateSubmission,
+            lateSubmissionDuration
+        } = req.body;
 
         if (!id) {
             return res.status(400).send({
@@ -183,6 +200,14 @@ export const updateAssignmentController = async (req, res) => {
         if (title) updateData.title = title;
         if (description) updateData.description = description;
         if (dueDate) updateData.dueDate = dueDate;
+        if (allowLateSubmission !== undefined) {
+            updateData.allowLateSubmission = allowLateSubmission;
+            if (allowLateSubmission) {
+                updateData.lateSubmissionDuration = lateSubmissionDuration || 24;
+            } else {
+                updateData.lateSubmissionDuration = 0;
+            }
+        }
 
         // upload new materials if provided
         if (req.files && req.files.length > 0) {
@@ -228,6 +253,7 @@ export const updateAssignmentController = async (req, res) => {
     }
 };
 
+// delete one assignment
 export const deleteAssignmentController = async (req, res) => {
     try {
         const { id } = req.params;
@@ -247,6 +273,25 @@ export const deleteAssignmentController = async (req, res) => {
                 message: "Assignment not found"
             })
         };
+
+        // find all submission of this assignment
+        const submissions = await submissionModel.find({ assignment: id });
+        const submissionMaterialIds = submissions.flatMap(s => s.materials);
+
+        // delete materials of submissions 
+        if (submissionMaterialIds.length > 0) {
+            const submissionMaterials = await materialsModel.find({ _id: { $in: submissionMaterialIds } });
+
+            if (submissionMaterials.length > 0) {
+                const submissionKeys = submissionMaterials.map(m => m.key);
+                await deleteObjects(submissionKeys);
+            }
+
+            await materialsModel.deleteMany({ _id: { $in: submissionMaterialIds } });
+        }
+
+        // delete submissions
+        await submissionModel.deleteMany({ assignment: id });
 
         // delete all materials from s3
         if (assignment.materials && assignment.materials.length > 0) {
@@ -356,9 +401,69 @@ export const deleteAllMaterialsAssignmentController = async (req, res) => {
 
         res.status(200).send({
             success: true,
-            message: "Deleted all assignments successfully",
+            message: "Deleted all material assignments successfully",
             assignments
         });
+    } catch (error) {
+        console.log("Error in delete material all assignments: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+// delete all assignments 
+export const deleteAllAssignmentController = async (req, res) => {
+    try {
+        const assignments = await assignmentModel.find({});
+
+        if (assignments.length === 0) {
+            return res.status(404).send({
+                success: false,
+                message: "Assignments not found"
+            });
+        };
+
+        // get the list Ids of assignments
+        const assignmentIds = assignments.map(a => a._id);
+
+        // find all submissions related assignments
+        const submissions = await submissionModel.find({
+            assignment: { $in: assignmentIds }
+        });
+
+        // get all materials from submission
+        const materialIds = submissions.flatMap(s => s.materials);
+        const submissionMaterials = await materialsModel.find({ _id: { $in: materialIds } });
+
+        // get all materials from assignments
+        const assignmentMaterials = assignments.flatMap(a => a.materials);
+
+        // create a list of key file S3 to delete
+        const s3Keys = [
+            ...submissionMaterials.map(m => m.key),
+            ...assignmentMaterials.map(m => m.key),
+        ].filter(Boolean);
+
+        if (s3Keys.length > 0) {
+            await deleteObjects(s3Keys);
+        };
+
+        // Delete related material
+        await materialsModel.deleteMany({ _id: { $in: materialIds } });
+
+        // delete related submission
+        await submissionModel.deleteMany({ assignment: { $in: assignmentIds } });
+
+        // delete assignments
+        const result = await assignmentModel.deleteMany({ _id: { $in: assignmentIds } });
+
+        return res.status(200).send({
+            success: true,
+            message: `Deleted ${result.deletedCount} assignments, ${submissions.length} submissions, and ${materialIds.length} materials successfully`
+        });
+
     } catch (error) {
         console.log("Error in delete all assignments: ", error);
         return res.status(500).send({

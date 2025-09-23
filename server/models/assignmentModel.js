@@ -10,11 +10,15 @@ const assignmentSchema = new mongoose.Schema({
     },
     dueDate: {
         type: Date,
-        default: Date.now()
+        default: Date.now
     },
     allowLateSubmission: {
         type: Boolean,
         default: false
+    },
+    lateSubmissionDuration: {
+        type: Number, // in hours
+        default: 0
     },
     materials: [
         {
@@ -32,7 +36,7 @@ const assignmentSchema = new mongoose.Schema({
             },
             uploadedAt: {
                 type: Date,
-                default: Date.now(),
+                default: Date.now,
             }
         }
     ],

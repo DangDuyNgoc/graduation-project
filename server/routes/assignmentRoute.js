@@ -2,6 +2,7 @@ import express from "express";
 import { isAuthenticated, isTeacher } from "../middlewares/authMiddleware.js";
 import {
     createAssignmentController,
+    deleteAllAssignmentController,
     deleteAllMaterialsAssignmentController,
     deleteAssignmentController,
     deleteOneAssignmentMaterialController,
@@ -32,6 +33,11 @@ assignmentRoute.delete("/delete-assignment/:id",
     isAuthenticated,
     isTeacher,
     deleteAssignmentController
+);
+assignmentRoute.delete("/delete-all-assignments",
+    isAuthenticated,
+    isTeacher,
+    deleteAllAssignmentController
 );
 assignmentRoute.delete("/delete-one-assignment-material",
     isAuthenticated,

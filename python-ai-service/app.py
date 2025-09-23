@@ -26,12 +26,23 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 dimension = 384
 
 # FAISS Index
-index_file = "faiss_store.index"
-if os.path.exists(index_file): 
-    faiss_index = faiss.read_index(index_file)
+course_index_file = "faiss_course.index"
+submission_index_file = "faiss_submission.index"
+
+# course index for materials
+if os.path.exists(course_index_file): 
+    faiss_course_index = faiss.read_index(course_index_file)
     print("Loaded FAISS index from file")
 else:
-    faiss_index = faiss.IndexFlatL2(dimension)
+    faiss_course_index = faiss.IndexFlatL2(dimension)
+    print("Created new FAISS index")
+
+# submssion index for materials
+if os.path.exists(submission_index_file): 
+    faiss_submission_index = faiss.read_index(submission_index_file)
+    print("Loaded FAISS index from file")
+else:
+    faiss_submission_index = faiss.IndexFlatL2(dimension)
     print("Created new FAISS index")
 
 def download_file(url): 
@@ -69,7 +80,7 @@ def recursive_chunk(text, chunk_size = 500, chunk_overlap = 50):
 
     return splitter.split_text(text)
 
-# api processing of material
+# api processing material of course belong to teacher 
 @app.route("/process_material/<material_id>", methods=["POST"])
 def process_material(material_id):
     doc = materials.find_one({"_id": ObjectId(material_id)})
@@ -81,6 +92,11 @@ def process_material(material_id):
     
     results = []
     try:
+        materials.update_one(
+            {"_id": ObjectId(material_id)},
+            {"$set": {"processedStatus": "processing"}}
+        )
+
         # download + extract
         local_path = download_file(file_url)
         text = extract_text(local_path)
@@ -91,32 +107,47 @@ def process_material(material_id):
         # embeddings
         embeddings = model.encode(chunks, convert_to_numpy=True)
 
-        # Add to FAISS
-        start_id = faiss_index.ntotal
-        faiss_index.add(np.array(embeddings))
+        # Map embeddings with MongoDB ObjectId as FAISS ID
+        faiss_ids = [int(str(ObjectId())[:16], 16) for _ in range(len(chunks))]  # 16 hex chars -> int64
+        faiss_course_index.add_with_ids(np.array(embeddings), np.array(faiss_ids, dtype=np.int64))
+        faiss.write_index(faiss_course_index, course_index_file)
 
         # savings FAISS into file
-        faiss.write_index(faiss_index, index_file)
+        faiss.write_index(faiss_course_index, course_index_file)
 
         # Save into DB
         for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
-            faiss_id = start_id + idx
             chunks_col.insert_one({
                 "materialId" : ObjectId(material_id),
                 "text": chunk_text,
                 "embedding": embedding.tolist(),
-                "faissId": faiss_id,
+                "chunkIndex": idx,
+                "faissId": faiss_ids,
                 "createdAt": datetime.now(timezone.utc)
+            })
+
+        materials.update_one(
+            {"_id": ObjectId(material_id)},
+            {"$set": {"processedStatus": "done", 
+                      "chunkCount": len(chunks),
+                      "extractedTextLength": len(text)
+                    }
             })
 
         results.append({
             "fileUrl": file_url,
-            "numChunks": len(chunks),
+            "numChunks": len(chunks),   
             "embeddingShape": embeddings.shape,
         })
         os.unlink(local_path)
 
     except Exception as e:
+        # update status error
+        materials.update_one(
+            {"_id": ObjectId(material_id)},
+            {"$set": {"processedStatus": "error"}}
+        )
+
         results.append({
             "fileUrl": file_url,
             "error": str(e)
@@ -124,6 +155,7 @@ def process_material(material_id):
     
     return jsonify({
         "materialId": material_id,
+        "status": "done",
         "results": results
     })
 
@@ -143,10 +175,10 @@ def delete_material(material_id):
         if faiss_ids: 
             # convert to numpy int64
             ids_array = np.array(faiss_ids, dtype=np.int64)
-            faiss_index.remove_ids(ids_array)
+            faiss_course_index.remove_ids(ids_array)
 
             # update index file after deleted 
-            faiss.write_index(faiss_index, index_file)
+            faiss.write_index(faiss_course_index, course_index_file)
 
         # delete chunk in DB
         chunks_col.delete_many({"materialId": ObjectId(material_id)})
@@ -179,7 +211,7 @@ def delete_course(course_id):
             if faiss_ids: 
                 # convert to numpy int64
                 ids_array = np.array(faiss_ids, dtype=np.int64)
-                faiss_index.remove_ids(ids_array)
+                faiss_course_index.remove_ids(ids_array)
                 total_embeddings += len(faiss_ids)
 
             # delete chunks from DB
@@ -187,7 +219,7 @@ def delete_course(course_id):
             total_chunks += deleted.deleted_count
 
         # update index file
-        faiss.write_index(faiss_index, index_file)
+        faiss.write_index(faiss_course_index, course_index_file)
 
         return jsonify({
             "success": True,
@@ -199,6 +231,7 @@ def delete_course(course_id):
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+# api processing materials of submission belong to student
 @app.route("/process_submission/<submission_id>", methods =["POST"])
 def process_submission(submission_id):
 
@@ -214,6 +247,8 @@ def process_submission(submission_id):
 
     for file_url in file_url: 
         try: 
+            
+
             # Download + extract
             local_path = download_file(file_url)
             text = extract_text(local_path)
@@ -224,22 +259,22 @@ def process_submission(submission_id):
             # Embeddings
             embeddings = model.encode(chunks, convert_to_numpy=True)
 
-            # Add to FAISS
-            start_id = faiss_index.ntotal
-            faiss_index.add(np.array(embeddings))
+            # Map embeddings with MongoDB ObjectId as FAISS ID
+            faiss_ids = [int(str(ObjectId())[:16], 16) for _ in range(len(chunks))]  # 16 hex chars -> int64
+            faiss_submission_index.add_with_ids(np.array(embeddings), np.array(faiss_ids, dtype=np.int64))
+            faiss.write_index(faiss_submission_index, submission_index_file)
 
             # Saving FAISS into file
-            faiss.write_index(faiss_index, index_file)
+            faiss.write_index(faiss_submission_index, submission_index_file)
 
             # Save into DB
             for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
-                faiss_id = start_id + idx
                 chunks_col.insert_one({
-                    "submmissionId": ObjectId(submission_id),
+                    "submissionId": ObjectId(submission_id),
                     "text": chunk_text,
                     "embedding": embedding.tolist(),
                     "chunkIndex": idx,
-                    "faissId": faiss_id,
+                    "faissId": faiss_ids,
                     "createdAt": datetime.now(timezone.utc)
                 })
 
@@ -260,5 +295,66 @@ def process_submission(submission_id):
         "results": results
     })
 
+# delete one submission
+@app.route("/delete_submission/<submission_id>", methods=["DELETE"])
+def delete_submission(submission_id):
+    try: 
+        # get all chunks related in DB
+        related_chunks = list(chunks_col.find({"submissionId": ObjectId(submission_id)}))
+
+        if not related_chunks:
+            return jsonify({"success": False, "message": "No chunks found for this material"}), 404
+        
+        # get list of faiss id
+        faiss_ids = [c["faissId"] for c in related_chunks if "faissId" in c]
+
+        if faiss_ids: 
+            # convert to numpy int64
+            ids_array = np.array(faiss_ids, dtype=np.int64)
+            faiss_submission_index.remove_ids(ids_array)
+
+            # update index file after deleted 
+            faiss.write_index(faiss_submission_index, submission_index_file)
+
+        # delete chunk in DB
+        chunks_col.delete_many({"submissionId": ObjectId(submission_id)})
+
+        return jsonify({
+            "success": True,
+            "message": f"Deleted material {submission_id}, removed {len(faiss_ids)} embeddings"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+    
+# delete all submissions
+@app.route("/delete_all_submissions", methods=["DELETE"])
+def delete_all_submissions():
+    try:
+        # get all related chunks in DB
+        related_chunks = list(chunks_col.find({"submissionId": {"$exists": True}}))
+
+        if not related_chunks:
+            return jsonify({"success": False, "message": "No chunks found for this submission"}), 404
+        
+        # get list of faiss id
+        faiss_ids = [c["faissId"] for c in related_chunks if "faissId" in c]
+
+        if faiss_ids: 
+            # convert to numpy int64
+            ids_array = np.array(faiss_ids, dtype=np.int64)
+            faiss_submission_index.remove_ids(ids_array)
+
+            # update index file after deleted 
+            faiss.write_index(faiss_submission_index, submission_index_file)
+
+        # delete chunk in DB
+        chunks_col.delete_many({"submissionId": {"$exists": True}})
+
+        return jsonify({
+            "success": True,
+            "message": f"Deleted all submissions, removed {len(faiss_ids)} embeddings"
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
