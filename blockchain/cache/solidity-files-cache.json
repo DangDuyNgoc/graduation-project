@@ -1,0 +1,41 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "E:\\grduation-project\\blockchain\\contracts\\SubmissionStorage.sol": {
+      "lastModificationDate": 1759239760513,
+      "contentHash": "3a9fe1d9fe7c5ceea390f0eeda6e3c88",
+      "sourceName": "contracts/SubmissionStorage.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "SubmissionStorage"
+      ]
+    }
+  }
+}

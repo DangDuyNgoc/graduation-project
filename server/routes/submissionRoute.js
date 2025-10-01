@@ -7,7 +7,8 @@ import {
     getStudentSubmissionsController,
     getSubmissionController,
     updateSubmissionController,
-    uploadSubmissionController
+    uploadSubmissionController,
+    verifySubmissionBlockchainController
 } from "../controllers/submissionController.js";
 import uploadMaterials from "../middlewares/uploadMaterials.js";
 
@@ -50,5 +51,7 @@ submissionRoute.delete("/delete-all-submissions/:id",
     isTeacher,
     deleteAllSubmissionsController
 );
+
+submissionRoute.post("/verify", isAuthenticated, verifySubmissionBlockchainController);
 
 export default submissionRoute;

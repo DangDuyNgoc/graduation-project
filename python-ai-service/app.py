@@ -29,20 +29,27 @@ dimension = 384
 course_index_file = "faiss_course.index"
 submission_index_file = "faiss_submission.index"
 
+def ensure_id_map(index):
+    if not isinstance(index, faiss.IndexIDMap):
+        return faiss.IndexIDMap(index)
+    return index
+
 # course index for materials
 if os.path.exists(course_index_file): 
     faiss_course_index = faiss.read_index(course_index_file)
+    faiss_course_index = ensure_id_map(faiss_course_index)
     print("Loaded FAISS index from file")
 else:
-    faiss_course_index = faiss.IndexFlatL2(dimension)
+    faiss_course_index = faiss.IndexIDMap(faiss.IndexFlatL2(dimension))
     print("Created new FAISS index")
 
 # submssion index for materials
 if os.path.exists(submission_index_file): 
     faiss_submission_index = faiss.read_index(submission_index_file)
+    faiss_submission_index = ensure_id_map(faiss_submission_index)
     print("Loaded FAISS index from file")
 else:
-    faiss_submission_index = faiss.IndexFlatL2(dimension)
+    faiss_submission_index = faiss.IndexIDMap(faiss.IndexFlatL2(dimension))
     print("Created new FAISS index")
 
 def download_file(url): 
@@ -239,13 +246,20 @@ def process_submission(submission_id):
     if not doc: 
         return jsonify({"error": "Submission not found"}), 404
     
-    file_url= doc.get("fileUrls", [])
-    if not file_url: 
-        return jsonify({"error": "No files in submission"}), 400
+    material_ids= doc.get("materials", [])
+    if not material_ids: 
+        return jsonify({"error": "No materials in submission"}), 400
     
+    # query to materials collection to get s3_url
+    material_docs = list(materials.find({"_id": {"$in": material_ids}}))
+    file_urls = [m.get("s3_url") for m in material_docs if m.get("s3_url")]
+
+    if not file_urls:
+        return jsonify({"error": "No file urls found in materials"}), 400
+
     results = []
 
-    for file_url in file_url: 
+    for file_url in file_urls: 
         try: 
             
 

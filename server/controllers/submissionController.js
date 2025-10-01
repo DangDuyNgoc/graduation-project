@@ -1,4 +1,5 @@
 import axios from "axios";
+import crypto from "crypto";
 
 import assignmentModel from "../models/assignmentModel.js";
 import materialsModel from "../models/materialModel.js";
@@ -6,6 +7,7 @@ import submissionModel from "../models/submissionModel.js";
 import userModel from "../models/userModel.js";
 import { deleteObjects } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
+import contract from "../utils/blockchain.js";
 
 export const uploadSubmissionController = async (req, res) => {
     try {
@@ -51,10 +53,15 @@ export const uploadSubmissionController = async (req, res) => {
         };
 
         const materialDocs = [];
+        let combinedHash = crypto.createHash("sha256");
 
+        // upload files to S3 and create material docs
         for (const file of req.files) {
             const fileName = `submission/${Date.now()}_${file.originalname}`;
             const { url } = await putObject(file.buffer, fileName, file.mimetype)
+
+            // update hash
+            combinedHash.update(file.buffer);
 
             const material = new materialsModel({
                 submissionId: null,
@@ -69,11 +76,15 @@ export const uploadSubmissionController = async (req, res) => {
             materialDocs.push(material);
         };
 
+        // get combined hash of all files
+        const contentHash = combinedHash.digest("hex");
+
         // create submission
         const submission = new submissionModel({
             student: req.user._id,
             assignment: id,
             materials: materialDocs.map(m => m._id),
+            contentHash,
             isLate,
             lateDuration
         });
@@ -86,9 +97,19 @@ export const uploadSubmissionController = async (req, res) => {
             { $set: { submissionId: submission._id } }
         );
 
+        // save hash on blockchain
+        try {
+            const tx = await contract.storeSubmission(id.toString(), contentHash);
+            await tx.wait(); // wait for transaction to be mined
+            console.log("Submission stored on blockchain with hash:", contentHash);
+        } catch (error) {
+            console.error("Error storing submission on blockchain:", error);
+        }
+
         // call flask api to process the submission
         try {
-            await axios.post(`http://localhost:5000/process_submission/${submission._id}`);
+            const response = await axios.post(`http://localhost:5000/process_submission/${submission._id}`);
+            console.log("Flask processing result:", response.data);
         } catch (error) {
             console.error("Error calling Flask API:", error.response?.data || error.message);
         }
@@ -145,7 +166,7 @@ export const updateSubmissionController = async (req, res) => {
 
     if (assignments.dueDate && now > assignments.dueDate) {
         if (!assignments.allowLateSubmission) {
-            return res.status.send({
+            return res.status(400).send({
                 success: false,
                 message: "The submission deadline has passed. Late submissions are not allowed."
             });
@@ -192,9 +213,22 @@ export const updateSubmissionController = async (req, res) => {
 
     // upload the new file to S3
     const newMaterialDocs = [];
+    let combinedHash = crypto.createHash("sha256");
+
+    if (keepOld && submission.materials.length > 0) {
+        const oldMaterials = await materialsModel.find({ _id: { $in: submission.materials } });
+        for (const old of oldMaterials) {
+            const res = await axios.get(old.s3_url, { responseType: "arraybuffer" });
+            combinedHash.update(Buffer.from(res.data));
+        }
+    }
+
     for (const file of req.files) {
         const fileName = `submission/${Date.now()}_${file.originalname}`;
         const { url } = await putObject(file.buffer, fileName, file.mimetype);
+
+        // update hash
+        combinedHash.update(file.buffer);
 
         const material = new materialsModel({
             submissionId: submission._id,
@@ -213,7 +247,17 @@ export const updateSubmissionController = async (req, res) => {
     submission.materials = [...submission.materials, ...newMaterialDocs.map(m => m._id)];
     submission.isLate = isLate;
     submission.lateDuration = lateDuration;
+    submission.contentHash = combinedHash.digest("hex");
     await submission.save();
+
+    // save hash on blockchain
+    try {
+        const tx = await contract.storeSubmission(submission.assignment._id.toString(), submission.contentHash);
+        await tx.wait(); // wait for transaction to be mined
+        console.log("Submission stored on blockchain with hash:", tx.hash);
+    } catch (error) {
+        console.error("Error storing submission on blockchain:", error);
+    }
 
     // call flask api to process the submission
     try {
@@ -463,3 +507,29 @@ export const deleteAllSubmissionsController = async (req, res) => {
         });
     }
 };
+
+export const verifySubmissionBlockchainController = async (req, res) => {
+    try {
+        const { studentId, assignmentId, hash } = req.body;
+
+        if (!studentId || !assignmentId || !hash) {
+            return res.status(400).send({
+                success: false,
+                message: "Please provide studentId, assignmentId and hash"
+            });
+        }
+        const isValid = await contract.verifySubmission(studentId, assignmentId, hash);
+
+        return res.status(200).send({
+            success: true,
+            message: "Verify submission on blockchain successfully",
+            isValid
+        });
+    } catch (error) {
+        console.log("Error in verify submission on blockchain: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+}

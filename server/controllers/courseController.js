@@ -371,25 +371,33 @@ export const deleteCourseController = async (req, res) => {
 
         // get all assignments of the course
         const assignments = await assignmentModel.find({ courseId: id });
+        const assignmentIds = assignments.map(a => a._id);
 
-        for (const assignment of assignments) {
-            // get all submissions of the assignment
-            const submissions = await submissionModel.find({ assignment: assignment._id });
-            for (const submission of submissions) {
-                if (submission.materials && submission.materials.length > 0) {
-                    const subMaterials = await materialsModel.find({ _id: { $in: submission.materials } });
-                    const subKeys = subMaterials.map(m => m.key);
+        if (assignmentIds.length > 0) {
+            // get all submissions of the assignments
+            const submissions = await submissionModel.find({ assignment: { $in: assignmentIds } });
+            const submissionIds = submissions.map(s => s._id);
 
-                    if (subKeys.length > 0) {
-                        await deleteObjects(subKeys);
-                    }
-                    await materialsModel.deleteMany({ _id: { $in: submission.materials } });
+            // get all materials of the submissions
+            const submissionMaterialIds = submissions.flatMap(s => s.materials);
+            if (submissionMaterialIds.length > 0) {
+                const submissionMaterials = await materialsModel.find({ _id: { $in: submissionMaterialIds } });
+                const submissionMaterialKeys = submissionMaterials.map(m => m.key).filter(Boolean);
+
+                if (submissionMaterialKeys.length > 0) {
+                    // delete submission materials from S3
+                    await deleteObjects(submissionMaterialKeys);
                 }
+                // delete submission materials from DB
+                await materialsModel.deleteMany({ _id: { $in: submissionMaterialIds } });
             }
-            await submissionModel.deleteMany({ assignment: assignment._id });
-        }
 
-        await assignmentModel.deleteMany({ courseId: id });
+            // delete submissions from DB
+            await submissionModel.deleteMany({ _id: { $in: submissionIds } });
+
+            // delete assignments from DB
+            await assignmentModel.deleteMany({ _id: { $in: assignmentIds } });
+        }
 
         // delete materials from S3
         if (course.materials && course.materials.length > 0) {
@@ -422,7 +430,7 @@ export const deleteAllCourseController = async (req, res) => {
             .populate("teacherId")
             .populate("materials")
 
-        if (!course) {
+        if (!course || course.length === 0) {
             return res.status(400).send({
                 success: false,
                 message: "Course not found",
@@ -440,16 +448,17 @@ export const deleteAllCourseController = async (req, res) => {
         // call flask api
         for (const c of course) {
             try {
-                for (const mat of allMaterials) {
-                    await axios.delete(`http://localhost:5000/delete_course/${c._id}`)
-                }
+                await axios.delete(`http://localhost:5000/delete_course/${c._id}`);
             } catch (error) {
                 console.error("Error calling Flask API:", error.response?.data || error.message);
             }
         }
 
-        await materialsModel.deleteMany({});
 
+        // delete all data from DB: courses, materials, assignments and submissions
+        await submissionModel.deleteMany({});
+        await assignmentModel.deleteMany({});
+        await materialsModel.deleteMany({});
         await courseModel.deleteMany({});
 
         return res.status(200).send({
