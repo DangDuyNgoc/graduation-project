@@ -56,25 +56,54 @@ export const uploadSubmissionController = async (req, res) => {
         let combinedHash = crypto.createHash("sha256");
 
         // upload files to S3 and create material docs
+        // for (const file of req.files) {
+        //     const fileName = `submission/${Date.now()}_${file.originalname}`;
+        //     const { url } = await putObject(file.buffer, fileName, file.mimetype)
+
+        //     // update hash
+        //     combinedHash.update(file.buffer);
+
+        //     const material = new materialsModel({
+        //         submissionId: null,
+        //         title: file.originalname,
+        //         s3_url: url,
+        //         key: fileName,
+        //         fileType: file.mimetype,
+        //         ownerType: "submissionMaterial"
+        //     });
+
+        //     await material.save();
+        //     materialDocs.push(material);
+        // };
+
         for (const file of req.files) {
-            const fileName = `submission/${Date.now()}_${file.originalname}`;
-            const { url } = await putObject(file.buffer, fileName, file.mimetype)
+          const fileName = `submission/${Date.now()}_${file.originalname}`;
+          const { url } = await putObject(file.buffer, fileName, file.mimetype);
 
-            // update hash
-            combinedHash.update(file.buffer);
+          combinedHash.update(file.buffer);
 
-            const material = new materialsModel({
-                submissionId: null,
-                title: file.originalname,
+          try {
+            const response = await axios.post(
+              `http://localhost:5000/process_material_submission`,
+              {
                 s3_url: url,
-                key: fileName,
+                title: file.originalname,
                 fileType: file.mimetype,
-                ownerType: "submissionMaterial"
-            });
+                courseId: assignments.course?.toString() || null,
+                submissionId: id,
+                ownerType: "submissionMaterial",
+              }
+            );
 
-            await material.save();
-            materialDocs.push(material);
-        };
+            console.log("Flask processed material:", response.data);
+            materialDocs.push(response.data);
+          } catch (error) {
+            console.error(
+              "Error sending material to Flask:",
+              error.response?.data || error.message
+            );
+          }
+        }
 
         // get combined hash of all files
         const contentHash = combinedHash.digest("hex");
