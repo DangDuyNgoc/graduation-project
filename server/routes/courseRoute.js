@@ -8,7 +8,7 @@ import {
     deleteCourseMaterialsController,
     deleteOneCourseMaterialController,
     getAllCourseController,
-    getCourseController,
+    getCourseByIdController,
     removeStudentsFromCourseController,
     updateCourseController
 } from "../controllers/courseController.js";
@@ -24,7 +24,7 @@ courseRoute.post(
     createCourseController
 );
 courseRoute.get("/get-all-courses", getAllCourseController);
-courseRoute.get("/get-course/:id", getCourseController);
+courseRoute.get("/get-course/:id", isAuthenticated, getCourseByIdController);
 courseRoute.put(
     "/update-course/:id",
     isAuthenticated,

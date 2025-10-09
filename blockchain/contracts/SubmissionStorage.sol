@@ -3,46 +3,82 @@ pragma solidity ^0.8.0;
 
 contract SubmissionStorage {
     struct Submission {
-        string hash;
+        string assignmentId;
+        string contentHash;
         uint256 timestamp;
     }
 
-    // mapping: studentAddress => assignmentId => list submissions
-    mapping(address => mapping(string => Submission[])) private submissions;
+    // mapping: studentId => submissions
+    mapping(string => Submission[]) private submissions;
 
-    event SubmissionStored(address indexed student, string assignmentId, string hash, uint256 timestamp);
+    event SubmissionStored(
+        string indexed studentId,
+        string assignmentId,
+        string contentHash,
+        uint256 timestamp
+    );
 
-    function storeSubmission(string memory assignmentId, string memory hash) public {
-        submissions[msg.sender][assignmentId].push(Submission(hash, block.timestamp));
+    // store submission on behalf of student
+    function storeSubmission(
+        string memory studentId,
+        string memory assignmentId, 
+        string memory contentHash
+    ) public {
+        Submission memory newSubmission = Submission({
+            assignmentId: assignmentId,
+            contentHash: contentHash,
+            timestamp: block.timestamp
+        });
 
-        emit SubmissionStored(msg.sender, assignmentId, hash, block.timestamp);
+        submissions[studentId].push(newSubmission);
+
+        emit SubmissionStored(studentId, assignmentId, contentHash, block.timestamp);
     }
 
-    function getSubmissions(address student, string memory assignmentId) public view returns (Submission[] memory) {
-        return submissions[student][assignmentId];
+    // get all submissions of a student
+    function getSubmissions(string memory studentId) 
+        public 
+        view 
+        returns (Submission[] memory) 
+    {
+        return submissions[studentId];
     }
 
-    function verifySubmission(address student, string memory assignmentId, string memory hash) public view returns (bool) {
-        Submission[] memory subs = submissions[student][assignmentId];
+    // verify by hash
+    function verifySubmission(string memory studentId, string memory assignmentId, string memory contentHash) 
+        public 
+        view 
+        returns (bool) 
+    {
+        Submission[] memory subs = submissions[studentId];
         for (uint i = 0; i < subs.length; i++) {
-            if (keccak256(abi.encodePacked(subs[i].hash)) == keccak256(abi.encodePacked(hash))) {
+            if (
+                keccak256(abi.encodePacked(subs[i].assignmentId)) == keccak256(abi.encodePacked(assignmentId)) &&
+                keccak256(abi.encodePacked(subs[i].contentHash)) == keccak256(abi.encodePacked(contentHash))
+            ) {
                 return true;
             }
         }
         return false;
     }
 
-    function getSubmission(address student, string memory assignmentId, uint index) 
-    public view returns (string memory, uint256) 
+    // get one submission by index
+    function getSubmission(string memory studentId, uint index) 
+        public 
+        view 
+        returns (string memory assignmentId, string memory contentHash, uint256 timestamp) 
     {
-        require(index < submissions[student][assignmentId].length, "Invalid index");
-        Submission memory sub = submissions[student][assignmentId][index];
-        return (sub.hash, sub.timestamp);
+        require(index < submissions[studentId].length, "Invalid index");
+        Submission memory sub = submissions[studentId][index];
+        return (sub.assignmentId, sub.contentHash, sub.timestamp);
     }
 
-    function getSubmissionCount(address student, string memory assignmentId) 
-        public view returns (uint) 
+    // count submissions
+    function getSubmissionCount(string memory studentId) 
+        public 
+        view 
+        returns (uint) 
     {
-        return submissions[student][assignmentId].length;
+        return submissions[studentId].length;
     }
 }

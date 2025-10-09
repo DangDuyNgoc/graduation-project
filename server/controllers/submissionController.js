@@ -99,9 +99,12 @@ export const uploadSubmissionController = async (req, res) => {
 
         // save hash on blockchain
         try {
-            const tx = await contract.storeSubmission(id.toString(), contentHash);
+            const tx = await contract.storeSubmission(
+                submission.student._id.toString(),
+                id.toString(),
+                contentHash
+            );
             await tx.wait(); // wait for transaction to be mined
-            console.log("Submission stored on blockchain with hash:", contentHash);
         } catch (error) {
             console.error("Error storing submission on blockchain:", error);
         }
@@ -194,7 +197,7 @@ export const updateSubmissionController = async (req, res) => {
     if (!keepOld) {
         // call flask api to delete related chunks schema
         try {
-            await axios.post(`http://localhost:5000/delete_submission_chunks/${submission._id}`);
+            await axios.post(`http://localhost:5000/delete_submission/${submission._id}`);
         } catch (error) {
             console.error("Error calling Flask API in deleting files:", error.response?.data || error.message);
         }
@@ -252,9 +255,12 @@ export const updateSubmissionController = async (req, res) => {
 
     // save hash on blockchain
     try {
-        const tx = await contract.storeSubmission(submission.assignment._id.toString(), submission.contentHash);
+        const tx = await contract.storeSubmission(
+            submission.student._id.toString(),
+            submission.assignment._id.toString(),
+            submission.contentHash
+        );
         await tx.wait(); // wait for transaction to be mined
-        console.log("Submission stored on blockchain with hash:", tx.hash);
     } catch (error) {
         console.error("Error storing submission on blockchain:", error);
     }
@@ -302,7 +308,7 @@ export const getAllSubmissionController = async (req, res) => {
         res.status(200).send({
             success: true,
             message: "Get all submissions successfully",
-            submissions
+            submissions,
         });
     } catch (error) {
         console.log("Error in get all submissions: ", error);
@@ -330,6 +336,7 @@ export const getSubmissionController = async (req, res) => {
             .populate("assignment")
             .populate("student");
 
+
         if (!submission) {
             return res.status(404).send({
                 success: false,
@@ -337,10 +344,31 @@ export const getSubmissionController = async (req, res) => {
             })
         }
 
+        // fetch submissions from blockchain
+        let blockchainSubmissions = [];
+        try {
+            const studentId = submission.student._id.toString();
+            const count = await contract.getSubmissionCount(studentId);
+            for (let i = 0; i < count; i++) {
+                const [assignmentId, contentHash, timestamp] = await contract.getSubmission(
+                    studentId,
+                    i
+                );
+                blockchainSubmissions.push({
+                    assignmentId,
+                    contentHash,
+                    timestamp: Number(timestamp)
+                });
+            }
+        } catch (err) {
+            console.error("Error fetching blockchain submissions:", err);
+        }
+
         return res.status(200).send({
             success: true,
             message: "Fetched Submission Successfully",
-            submission
+            submission,
+            blockchainSubmissions
         })
 
     } catch (error) {
@@ -489,7 +517,7 @@ export const deleteAllSubmissionsController = async (req, res) => {
 
         // call flask api to delete related chunks schema
         try {
-            await axios.post('http://localhost:5000/delete_all_submission');
+            await axios.delete('http://localhost:5000/delete_all_submissions');
         } catch (error) {
             console.error("Error calling Flask API:", error.response?.data || error.message);
         }
@@ -508,17 +536,18 @@ export const deleteAllSubmissionsController = async (req, res) => {
     }
 };
 
+// verify submission on blockchain
 export const verifySubmissionBlockchainController = async (req, res) => {
     try {
-        const { studentId, assignmentId, hash } = req.body;
+        const { studentId, assignmentId, contentHash } = req.body;
 
-        if (!studentId || !assignmentId || !hash) {
+        if (!studentId || !assignmentId || !contentHash) {
             return res.status(400).send({
                 success: false,
                 message: "Please provide studentId, assignmentId and hash"
             });
         }
-        const isValid = await contract.verifySubmission(studentId, assignmentId, hash);
+        const isValid = await contract.verifySubmission(studentId, assignmentId, contentHash);
 
         return res.status(200).send({
             success: true,

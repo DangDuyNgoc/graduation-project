@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "E:\\grduation-project\\blockchain\\contracts\\SubmissionStorage.sol": {
-      "lastModificationDate": 1759239760513,
-      "contentHash": "3a9fe1d9fe7c5ceea390f0eeda6e3c88",
+      "lastModificationDate": 1759414453852,
+      "contentHash": "12bdd6ef37f78095e00fcf0c7ba6b696",
       "sourceName": "contracts/SubmissionStorage.sol",
       "solcConfig": {
         "version": "0.8.20",
