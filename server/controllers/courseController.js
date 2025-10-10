@@ -1,6 +1,5 @@
 import axios from "axios";
 import courseModel from "../models/courseModel.js";
-import materialsModel from "../models/materialModel.js";
 import userModel from "../models/userModel.js";
 import { deleteObjects, deleteOneObject } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
@@ -26,48 +25,61 @@ export const createCourseController = async (req, res) => {
 
         await course.save();
 
+        const materialIds = [];
         // upload course to S3
         if (req.files && req.files.length > 0) {
-            const uploadPromises = req.files.map(async (file) => {
-                const fileName = `courses/${Date.now()}_${file.originalname}`;
-                const { url } = await putObject(file.buffer, fileName, file.mimetype);
+          for (const file of req.files) {
+            const fileName = `courses/${Date.now()}_${file.originalname}`;
+            const { url } = await putObject(
+              file.buffer,
+              fileName,
+              file.mimetype
+            );
 
-                const material = new materialsModel({
-                    courseId: course._id,
-                    title: file.originalname,
-                    s3_url: url,
-                    key: fileName, // S3 object key
-                    fileType: file.mimetype,
-                    ownerType: "courseMaterial"
-                });
+            let materialId = null;
 
-                await material.save();
+            try {
+              const flaskRes = await axios.post(
+                "http://localhost:5000/process_material_course",
+                {
+                  courseId: course._id.toString(),
+                  title: file.originalname,
+                  s3_url: url,
+                  s3_key: fileName,
+                  fileType: file.mimetype,
+                  ownerType: "courseMaterial",
+                }
+              );
 
-                // call flask api to processing embedding 
-                try {
-                    const flaskRes = await axios.post(
-                        `http://localhost:5000/process_material/${material._id}`,
-                    );
-                    // console.log("Flask processing result:", flaskRes.data);
-                } catch (error) {
-                    console.error("Error calling Flask API:", error.response?.data || error.message);
-                };
+              if (flaskRes.data.success) {
+                materialId = flaskRes.data._id;
+                console.log("Flask material saved:", materialId);
 
-                return material._id;
-            });
+                await axios.post(
+                  `http://localhost:5000/process_material/${materialId}`
+                );
+              } else {
+                console.error("Flask save error:", flaskRes.data.error);
+              }
+            } catch (error) {
+              console.error(
+                "Error calling Flask:",
+                error.response?.data || error.message
+              );
+            }
 
-            const materialIds = await Promise.all(uploadPromises);
+            if (materialId) materialIds.push(materialId);
+          }
+        }
 
-            // push material into course
-            course.materials.push(...materialIds);
-
-            await course.save();
+        if (materialIds.length > 0) {
+          course.materials.push(...materialIds);
+          await course.save();
         }
 
         // populate before sending request
         course = await courseModel.findById(course._id)
             .populate("teacherId")
-            .populate("materials");
 
         return res.status(200).send({
             success: true,
@@ -96,7 +108,6 @@ export const getCourseController = async (req, res) => {
 
         const course = await courseModel.findById(id)
             .populate("teacherId")
-            .populate("materials");
 
         if (!course || course.length === 0) {
             return res.status(404).send({
@@ -105,10 +116,24 @@ export const getCourseController = async (req, res) => {
             })
         };
 
+        let materials = [];
+        try {
+            const flaskRes = await axios.get(
+                `http://localhost:5000/get_materials_by_course/${course._id.toString()}`
+            );
+            if (flaskRes.data.success) {
+                materials = flaskRes.data?.materials;
+            }
+        } catch (err) {
+            console.log("[WARNING] Flask materials fetch failed:", err.message);
+        }
+
+        const result = {...course.toObject(), materials}
+
         return res.status(200).send({
             success: true,
             message: "Course details fetched successfully",
-            course
+            result
         });
     } catch (error) {
         console.log("Error in get course: ", error);
@@ -121,15 +146,46 @@ export const getCourseController = async (req, res) => {
 
 export const getAllCourseController = async (req, res) => {
     try {
-        const course = await courseModel.find({})
+        const courses = await courseModel.find({})
             .sort({ createdAt: -1 })
             .populate("teacherId")
-            .populate("materials");
+
+        const coursesWithMaterials = await Promise.all(
+          courses.map(async (course) => {
+            try {
+              const flaskRes = await axios.get(
+                `http://localhost:5000/get_materials_by_course/${course._id.toString()}`
+              );
+
+              const materialsFromFlask =
+                flaskRes.data?.success && Array.isArray(flaskRes.data.materials)
+                  ? flaskRes.data.materials
+                  : [];
+
+              const courseObj = course.toObject();
+              courseObj.teacherId = {
+                ...courseObj.teacherId,
+                materialFlask: materialsFromFlask,
+              };
+
+              return courseObj;
+            } catch (err) {
+              console.log(
+                `[WARNING] Failed to fetch materials for course ${course._id}:`,
+                err.message
+              );
+              return {
+                ...course.toObject(),
+                materials: [],
+              };
+            }
+          })
+        );
 
         return res.status(200).send({
             success: true,
             message: "All Courses fetched successfully",
-            course
+            course: coursesWithMaterials
         });
     } catch (error) {
         console.log("Error in get all courses: ", error);
@@ -177,43 +233,91 @@ export const updateCourseController = async (req, res) => {
 
         // upload new materials if provided
         if (req.files && req.files.length > 0) {
-            const uploadPromises = req.files.map(async (file) => {
-                const fileName = `courses/${Date.now()}_${file.originalname}`;
-                const { url } = await putObject(file.buffer, fileName, file.mimetype);
+          console.log("Updating materials for course:", course._id);
 
-                const material = new materialsModel({
-                    courseId: course._id,
-                    title: file.originalname,
-                    s3_url: url,
-                    key: fileName,
-                    fileType: file.mimetype,
-                    ownerType: "courseMaterial"
-                })
+          // delete old materials on Flask
+          const s3_key_map = [];
+          try {
+            const flaskRes = await axios.delete(
+              `http://localhost:5000/delete_course/${course._id.toString()}`
+            );
 
-                await material.save();
+            if (
+              Array.isArray(flaskRes.data?.s3_keys) &&
+              flaskRes.data.s3_keys.length > 0
+            ) {
+              s3_key_map.push(...flaskRes.data.s3_keys);
+            }
+            console.log("Deleted old materials in Flask for course:", id);
+          } catch (error) {
+            console.error(
+              "Error deleting old materials in Flask:",
+              error.response?.data || error.message
+            );
+          }
 
-                // call flask api to processing embedding 
-                try {
-                    const flaskRes = await axios.post(
-                        `http://localhost:5000/process_material/${material._id}`,
-                    );
-                    console.log("Flask processing result:", flaskRes.data);
-                } catch (error) {
-                    console.error("Error calling Flask API:", error.response?.data || error.message);
-                };
+          // delete old file on S3
+          const allKeys = s3_key_map.flat(Infinity).filter(Boolean);
+          if (allKeys.length > 0) {
+            await deleteObjects(allKeys);
+            console.log("Deleted old files on S3:", allKeys.length);
+          }
 
-                return material._id;
-            });
+          // upload new file
+          const uploadPromises = req.files.map(async (file) => {
+            const fileName = `courses/${Date.now()}_${file.originalname}`;
+            const { url } = await putObject(
+              file.buffer,
+              fileName,
+              file.mimetype
+            );
 
-            const materialIds = await Promise.all(uploadPromises);
-            course.materials.push(...materialIds);
+            let materialId = null;
 
+            try {
+              const flaskRes = await axios.post(
+                "http://localhost:5000/process_material_course",
+                {
+                  courseId: course._id.toString(),
+                  title: file.originalname,
+                  s3_url: url,
+                  s3_key: fileName,
+                  fileType: file.mimetype,
+                  ownerType: "courseMaterial",
+                }
+              );
+
+              if (flaskRes.data.success) {
+                materialId = flaskRes.data._id;
+                console.log("Flask material saved:", materialId);
+
+                await axios.post(
+                  `http://localhost:5000/process_material/${materialId}`
+                );
+              } else {
+                console.error("Flask save error:", flaskRes.data.error);
+              }
+            } catch (error) {
+              console.error(
+                "Error calling Flask:",
+                error.response?.data || error.message
+              );
+            }
+
+            return materialId;
+          });
+
+          const materialIds = await Promise.all(uploadPromises);
+          const validMaterialIds = materialIds.filter(Boolean); // remove null
+
+          // update materials for course
+          if (validMaterialIds.length > 0) {
+            course.materials = validMaterialIds; // overwrite
             await course.save();
-        };
+          }
+        }
 
-        course = await courseModel.findById(course._id)
-            .populate("teacherId")
-            .populate("materials");
+      course = await courseModel.findById(course._id).populate("teacherId");
 
         return res.status(200).send({
             success: true,
@@ -240,7 +344,7 @@ export const deleteCourseMaterialsController = async (req, res) => {
             })
         };
 
-        const course = await courseModel.findById(id).populate("materials");
+        const course = await courseModel.findById(id);
         if (!course || course.length === 0) {
             return res.status(404).send({
                 success: false,
@@ -257,15 +361,24 @@ export const deleteCourseMaterialsController = async (req, res) => {
         }
 
         // call flask api
-        try {
-            await axios.delete(`http://localhost:5000/delete_course/${id}`)
-        } catch (error) {
-            console.error("Error calling Flask API:", error.response?.data || error.message);
+        let s3_key_map = []
+        for (const materialId of course.materials) {
+          try {
+            const res = await axios.delete(
+              `http://localhost:5000/delete_material/${parseInt(materialId)}`
+            );
+            const s3Key = res.data?.s3_key;
+            if (s3Key) s3_key_map.push(s3Key);
+          } catch (error) {
+            console.error(
+              `Failed to delete material ${materialId} in Flask:`,
+              error.response?.data || error.message
+            );
+          }
         }
 
         // delete materials from S3
-        await deleteObjects(course.materials.map(material => material.key));
-        await materialsModel.deleteMany({ courseId: id });
+        await deleteObjects(s3_key_map);
 
         // remove materials from course
         course.materials = [];
@@ -296,7 +409,7 @@ export const deleteOneCourseMaterialController = async (req, res) => {
             });
         };
 
-        const course = await courseModel.findById(courseId).populate("materials");
+        const course = await courseModel.findById(courseId);
         if (!course) {
             return res.status(404).send({
                 success: false,
@@ -304,25 +417,15 @@ export const deleteOneCourseMaterialController = async (req, res) => {
             });
         };
 
-        // find the material to delete
-        const material = await materialsModel.findById(materialId);
-        if (!material) {
-            return res.status(404).send({
-                success: false,
-                message: "Material not found in this course",
-            });
-        };
-
-        // delete the material from S3
-        await deleteOneObject(materialKey);
-        await materialsModel.findByIdAndDelete(materialId);
-
         // call flask api
         try {
             await axios.delete(`http://localhost:5000/delete_material/${materialId}`)
         } catch (error) {
             console.error("Error calling Flask API:", error.response?.data || error.message);
         }
+
+        // delete the material from S3
+        await deleteOneObject(materialKey);
 
         // remove the material from the course
         course.materials.pull(materialId);
@@ -354,7 +457,7 @@ export const deleteCourseController = async (req, res) => {
             })
         };
 
-        const course = await courseModel.findById(id).populate("materials");
+        const course = await courseModel.findById(id);
         if (!course) {
             return res.status(404).send({
                 success: false,
@@ -363,10 +466,17 @@ export const deleteCourseController = async (req, res) => {
         };
 
         // call flask api 
+        const s3_key_map = [];
         try {
-            await axios.delete(`http://localhost:5000/delete_course/${id}`)
+          const flaskRes = await axios.delete(
+            `http://localhost:5000/delete_course/${id.toString()}`
+          );
+          if (flaskRes.data?.s3_keys.length > 0) s3_key_map.push(flaskRes.data?.s3_keys);
         } catch (error) {
-            console.error("Error calling Flask API:", error.response?.data || error.message);
+          console.error(
+            "Error calling Flask API:",
+            error.response?.data || error.message
+          );
         }
 
         // get all assignments of the course
@@ -378,20 +488,6 @@ export const deleteCourseController = async (req, res) => {
             const submissions = await submissionModel.find({ assignment: { $in: assignmentIds } });
             const submissionIds = submissions.map(s => s._id);
 
-            // get all materials of the submissions
-            const submissionMaterialIds = submissions.flatMap(s => s.materials);
-            if (submissionMaterialIds.length > 0) {
-                const submissionMaterials = await materialsModel.find({ _id: { $in: submissionMaterialIds } });
-                const submissionMaterialKeys = submissionMaterials.map(m => m.key).filter(Boolean);
-
-                if (submissionMaterialKeys.length > 0) {
-                    // delete submission materials from S3
-                    await deleteObjects(submissionMaterialKeys);
-                }
-                // delete submission materials from DB
-                await materialsModel.deleteMany({ _id: { $in: submissionMaterialIds } });
-            }
-
             // delete submissions from DB
             await submissionModel.deleteMany({ _id: { $in: submissionIds } });
 
@@ -400,13 +496,14 @@ export const deleteCourseController = async (req, res) => {
         }
 
         // delete materials from S3
-        if (course.materials && course.materials.length > 0) {
-            const materialKey = course.materials.map(mat => mat.key)
-                .filter(key => typeof key === "string" && key.length > 0);
-
-            await deleteObjects(materialKey);
-            await materialsModel.deleteMany({ courseId: id });
-        };
+        const allKeys = s3_key_map.flat(Infinity).filter(Boolean);
+        if (allKeys.length > 0) {
+          try {
+            await deleteObjects(allKeys);
+          } catch (err) {
+            console.error("Error deleting S3 objects:", err);
+          }
+        }
 
         await courseModel.findByIdAndDelete(id);
 
@@ -426,45 +523,49 @@ export const deleteCourseController = async (req, res) => {
 // delete all course 
 export const deleteAllCourseController = async (req, res) => {
     try {
-        const course = await courseModel.find({})
-            .populate("teacherId")
-            .populate("materials")
+      const course = await courseModel.find({}).populate("teacherId");
 
-        if (!course || course.length === 0) {
-            return res.status(400).send({
-                success: false,
-                message: "Course not found",
-            });
-        };
-
-        const allMaterials = await materialsModel.find({});
-        const allKeys = allMaterials.map(mat => mat.key);
-
-        if (allKeys.length > 0) {
-            // delete all file from S3
-            await deleteObjects(allKeys);
-        };
-
-        // call flask api
-        for (const c of course) {
-            try {
-                await axios.delete(`http://localhost:5000/delete_course/${c._id}`);
-            } catch (error) {
-                console.error("Error calling Flask API:", error.response?.data || error.message);
-            }
-        }
-
-
-        // delete all data from DB: courses, materials, assignments and submissions
-        await submissionModel.deleteMany({});
-        await assignmentModel.deleteMany({});
-        await materialsModel.deleteMany({});
-        await courseModel.deleteMany({});
-
-        return res.status(200).send({
-            success: true,
-            message: "Deleted all course successfully",
+      if (!course || course.length === 0) {
+        return res.status(400).send({
+          success: false,
+          message: "Course not found",
         });
+      }
+
+      // call flask api
+      const s3_key_map = [];
+      try {
+        const flaskRes = await axios.delete(
+          `http://localhost:5000/delete_all_courses`
+        );
+        if (
+          flaskRes.data?.success === true &&
+          Array.isArray(flaskRes.data?.s3_keys)
+        ) {
+          s3_key_map.push(...flaskRes.data.s3_keys);
+        }
+      } catch (error) {
+        console.error(
+          "Error calling Flask API:",
+          error.response?.data || error.message
+        );
+      }
+
+      // Delete S3 files
+      const allKeys = s3_key_map.flat(Infinity).filter(Boolean);
+      if (allKeys.length > 0) await deleteObjects(allKeys);
+
+      // delete all data from DB: courses, assignments and submissions
+      await Promise.all([
+        submissionModel.deleteMany({}),
+        assignmentModel.deleteMany({}),
+        courseModel.deleteMany({}),
+      ]);
+
+      return res.status(200).send({
+        success: true,
+        message: "Deleted all course successfully",
+      });
     } catch (error) {
         console.log("Error in delete all course: ", error);
         return res.status(500).send({

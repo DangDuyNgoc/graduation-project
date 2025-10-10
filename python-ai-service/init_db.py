@@ -22,6 +22,7 @@ def init_db():
             ownerType TEXT,
             title TEXT,
             s3_url TEXT,
+            s3_key TEXT,
             fileType TEXT,
             uploadedAt TEXT DEFAULT (datetime('now')),
             processingStatus TEXT DEFAULT 'pending' 
@@ -42,7 +43,7 @@ def init_db():
             text TEXT,
             embedding TEXT,
             createdAt TEXT DEFAULT (datetime('now')),
-            FOREIGN KEY (materialId) REFERENCES materials(id)
+            FOREIGN KEY (materialId) REFERENCES materials(id) ON DELETE CASCADE
         )
     """
     )

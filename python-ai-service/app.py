@@ -34,30 +34,27 @@ submission_index_file = "faiss_submission.index"
 if os.path.exists(course_index_file):
     faiss_course_index = faiss.read_index(course_index_file)
     print("Loaded FAISS index from file")
+    # wrap with IDMap if it not yet
+    if not isinstance(faiss_course_index, faiss.IndexIDMap):
+        faiss_course_index = faiss.IndexIDMap(faiss_course_index)
+        print("Wrapped course index with IDMap")
 else:
-    faiss_course_index = faiss.IndexFlatL2(dimension)
-    print("Created new FAISS index")
+    base_index = faiss.IndexFlatL2(dimension)
+    faiss_course_index = faiss.IndexIDMap(base_index)
+    print("Created new FAISS index with IDMap for course")
 
-# submssion index for materials
+# submission index for materials
 if os.path.exists(submission_index_file):
     faiss_submission_index = faiss.read_index(submission_index_file)
     print("Loaded FAISS index from file")
+    # wrap with IDMap if it not yet
+    if not isinstance(faiss_submission_index, faiss.IndexIDMap):
+        faiss_submission_index = faiss.IndexIDMap(faiss_submission_index)
+        print("Wrapped submission index with IDMap")
 else:
-    faiss_submission_index = faiss.IndexFlatL2(dimension)
-    print("Created new FAISS index")
-
-
-# def download_file(url):
-#     resp = requests.get(url)
-#     if resp.status_code != 200:
-#         raise Exception("Failed to download file")
-
-#     # get extension from URL (ex: .pdf, .docx)
-#     _, ext = os.path.splitext(url)
-#     tmp_file = te.NamedTemporaryFile(delete=False, suffix=ext)
-#     tmp_file.write(resp.content)
-#     tmp_file.close()
-#     return tmp_file.name
+    base_index = faiss.IndexFlatL2(dimension)
+    faiss_submission_index = faiss.IndexIDMap(base_index)
+    print("Created new FAISS index with IDMap for submission")
 
 
 def download_file(url):
@@ -111,56 +108,99 @@ def recursive_chunk(text, chunk_size=500, chunk_overlap=50):
     return splitter.split_text(text)
 
 
+@app.route("/process_material_course", methods=["POST"])
+def process_material_course():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    data = request.get_json()
+    s3_url = data.get("s3_url")
+    s3_key = data.get("s3_key")
+    title = data.get("title", "untitled")
+    file_type = data.get("fileType", "application/octet-stream")
+    course_id = data.get("courseId") or data.get("course_id")
+    owner_type = data.get("ownerType", "courseMaterial")
+
+    if not s3_url or not course_id:
+        return jsonify({"success": False, "error": "Missing s3_url or course_id"}), 400
+
+    try:
+        cursor.execute(
+            """
+            INSERT INTO materials (
+                courseId, submissionId, ownerType, title,
+                s3_url, s3_key, fileType,
+                chunkCount, extractedTextLength, processingStatus
+            )
+            VALUES (?, NULL, ?, ?, ?, ?, ?, 0, 0, 'pending')
+            """,
+            (course_id, owner_type, title, s3_url, s3_key, file_type),
+        )
+
+        material_id = cursor.lastrowid
+        conn.commit()
+
+        print(f"[INFO] Added course material: {title} (courseId={course_id})")
+
+        return jsonify(
+            {
+                "success": True,
+                "message": "Course material metadata saved successfully",
+                "_id": material_id,
+                "title": title,
+                "s3_url": s3_url,
+                "s3_key": s3_key,
+                "fileType": file_type,
+                "course_id": course_id,
+                "ownerType": owner_type,
+                "processingStatus": "pending",
+            }
+        )
+    except Exception as e:
+        conn.rollback()
+        print(f"[ERROR] process_material_course: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 # api processing material of course belong to teacher
-# API to process a course material (uploaded by teacher)
 @app.route("/process_material/<int:material_id>", methods=["POST"])
 def process_material(material_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Get file URL from SQLite materials
+    # Get file URL from SQLite
     cursor.execute("SELECT s3_url FROM materials WHERE id = ?", (material_id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
-        return jsonify({"error": "Material not found"}), 404
+        return jsonify({"success": False, "error": "Material not found"}), 404
 
     file_url = row[0]
     if not file_url:
         conn.close()
-        return jsonify({"error": "No file URL in material"}), 400
+        return jsonify({"success": False, "error": "No file URL in material"}), 400
 
-    # Update status to "processing"
+    # Update status
     cursor.execute(
         "UPDATE materials SET processingStatus = ? WHERE id = ?",
         ("processing", material_id),
     )
     conn.commit()
 
-    results = []
     try:
-        # Download file from S3 and extract text
         local_path = download_file(file_url)
         text = extract_text(local_path)
-
-        # Split text into chunks
         chunks = recursive_chunk(text, chunk_size=500, chunk_overlap=50)
-
-        # Generate embeddings for chunks
         embeddings = model.encode(chunks, convert_to_numpy=True).astype(np.float32)
         faiss.normalize_L2(embeddings)
 
-        # Save each chunk into FAISS and SQLite
-        for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
-            # Create random FAISS ID to ensure uniqueness
+        for chunk_text, embedding in zip(chunks, embeddings):
             faiss_id = np.random.randint(1, 1 << 60, dtype=np.int64)
-
-            # Add embedding to FAISS
             faiss_course_index.add_with_ids(
                 np.array([embedding]), np.array([faiss_id], dtype=np.int64)
             )
-
-            # Insert chunk into SQLite
             cursor.execute(
                 """
                 INSERT INTO chunks (materialId, text, embedding, faissId, createdAt)
@@ -175,7 +215,6 @@ def process_material(material_id):
                 ),
             )
 
-        # Update material status to done
         cursor.execute(
             """
             UPDATE materials
@@ -185,41 +224,90 @@ def process_material(material_id):
             ("done", len(chunks), len(text), material_id),
         )
         conn.commit()
-
-        # Persist FAISS index to disk
         faiss.write_index(faiss_course_index, course_index_file)
 
-        results.append(
+        try:
+            os.unlink(local_path)
+        except FileNotFoundError:
+            pass
+
+        return jsonify(
             {
-                "fileUrl": file_url,
+                "success": True,
+                "materialId": material_id,
+                "status": "done",
                 "numChunks": len(chunks),
                 "embeddingShape": embeddings.shape,
             }
         )
 
-        # Clean up local file
-        os.unlink(local_path)
-
     except Exception as e:
-        # Rollback changes and mark status as error
         conn.rollback()
         cursor.execute(
             "UPDATE materials SET processingStatus = ? WHERE id = ?",
             ("error", material_id),
         )
         conn.commit()
-        results.append({"fileUrl": file_url, "error": str(e)})
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "materialId": material_id,
+                    "error": str(e),
+                }
+            ),
+            500,
+        )
 
     finally:
         conn.close()
 
-    return jsonify(
-        {
-            "materialId": material_id,
-            "status": "done" if not any(r.get("error") for r in results) else "error",
-            "results": results,
-        }
-    )
+
+# get materials by course
+@app.route("/get_materials_by_course/<course_id>", methods=["GET"])
+def get_materials_by_course(course_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT id, title, s3_url, s3_key, fileType, courseId, submissionId,
+                   ownerType, chunkCount, extractedTextLength, processingStatus
+            FROM materials
+            WHERE courseId = ?
+            """,
+            (course_id,),
+        )
+        rows = cursor.fetchall()
+
+        materials = [
+            {
+                "_id": row[0],
+                "title": row[1],
+                "s3_url": row[2],
+                "s3_key": row[3],
+                "fileType": row[4],
+                "courseId": row[5],
+                "submissionId": row[6],
+                "ownerType": row[7],
+                "chunkCount": row[8],
+                "extractedTextLength": row[9],
+                "processingStatus": row[10],
+            }
+            for row in rows
+        ]
+
+        return jsonify(
+            {"success": True, "materials": materials, "count": len(materials)}
+        )
+
+    except Exception as e:
+        print(f"[ERROR] get_materials_by_course: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+    finally:
+        conn.close()
 
 
 # Delete one material and its chunks
@@ -229,19 +317,16 @@ def delete_material(material_id):
     cursor = conn.cursor()
 
     try:
+        # Get s3_key (if stored)
+        cursor.execute("SELECT s3_key FROM materials WHERE id = ?", (material_id,))
+        s3_row = cursor.fetchone()
+        s3_key = s3_row[0] if s3_row and s3_row[0] else None
+
         # Get FAISS IDs from chunks
         cursor.execute(
             "SELECT faissId FROM chunks WHERE materialId = ?", (material_id,)
         )
         rows = cursor.fetchall()
-        if not rows:
-            conn.close()
-            return (
-                jsonify(
-                    {"success": False, "message": "No chunks found for this material"}
-                ),
-                404,
-            )
 
         faiss_ids = [r[0] for r in rows if r[0] is not None]
 
@@ -256,10 +341,12 @@ def delete_material(material_id):
         cursor.execute("DELETE FROM materials WHERE id = ?", (material_id,))
 
         conn.commit()
+
         return jsonify(
             {
                 "success": True,
                 "message": f"Deleted material {material_id}, removed {len(faiss_ids)} embeddings",
+                "s3_key": s3_key,
             }
         )
     except Exception as e:
@@ -276,7 +363,9 @@ def delete_course(course_id):
 
     try:
         # Find all materials in this course
-        cursor.execute("SELECT id FROM materials WHERE courseId = ?", (course_id,))
+        cursor.execute(
+            "SELECT id, s3_key FROM materials WHERE courseId = ?", (course_id,)
+        )
         mats = cursor.fetchall()
 
         if not mats:
@@ -289,10 +378,13 @@ def delete_course(course_id):
 
         total_chunks = 0
         total_embeddings = 0
+        s3_keys = []
 
         # Loop over each material
         for mat_row in mats:
-            material_id = mat_row[0]
+            material_id, s3_key = mat_row
+            if s3_key:
+                s3_keys.append(s3_key)
 
             # Get FAISS ids
             cursor.execute(
@@ -331,6 +423,7 @@ def delete_course(course_id):
                 "materialsDeleted": mats_deleted,
                 "chunksDeleted": total_chunks,
                 "embeddingsDeleted": total_embeddings,
+                "s3_keys": s3_keys,
             }
         )
 
@@ -342,131 +435,193 @@ def delete_course(course_id):
         conn.close()
 
 
+@app.route("/delete_all_courses", methods=["DELETE"])
+def delete_all_courses():
+    global faiss_course_index, faiss_submission_index  # cần để reset()
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
+    cursor = conn.cursor()
+
+    try:
+        # --- Lấy tất cả materials ---
+        cursor.execute("SELECT s3_key FROM materials")
+        mats = cursor.fetchall()
+        s3_keys = [r[0] for r in mats if r[0]]
+        total_materials_deleted = len(mats)
+
+        # --- Xóa toàn bộ materials (tự xóa chunks nhờ ON DELETE CASCADE) ---
+        cursor.execute("DELETE FROM materials")
+        conn.commit()
+
+        # --- Reset FAISS indexes ---
+        faiss_course_index.reset()
+        faiss_submission_index.reset()
+        print("✅ Reset FAISS course & submission indexes")
+
+        # --- Ghi lại file sau khi reset (trống hoàn toàn) ---
+        faiss.write_index(faiss_course_index, course_index_file)
+        faiss.write_index(faiss_submission_index, submission_index_file)
+        print("✅ Saved empty FAISS indexes back to file")
+
+        return jsonify(
+            {
+                "success": True,
+                "message": "Deleted all materials and reset FAISS indexes",
+                "materialsDeleted": total_materials_deleted,
+                "s3_keys": s3_keys,
+            }
+        )
+
+    except Exception as e:
+        import traceback
+
+        print("DELETE_ALL_COURSES ERROR:", e)
+        traceback.print_exc()
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+    finally:
+        conn.close()
+
+
+# get materials by submission
+@app.route("/get_materials_by_submission/<submission_id>", methods=["GET"])
+def get_materials_by_submission(submission_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT id, title, s3_url, s3_key, fileType, courseId, submissionId, ownerType, chunkCount, extractedTextLength, processingStatus
+            FROM materials
+            WHERE submissionId = ?
+            """,
+            (submission_id,),
+        )
+        rows = cursor.fetchall()
+
+        materials = [
+            {
+                "_id": row[0],
+                "title": row[1],
+                "s3_url": row[2],
+                "s3_key": row[3],
+                "fileType": row[4],
+                "courseId": row[5],
+                "submissionId": row[6],
+                "ownerType": row[7],
+                "chunkCount": row[8],
+                "extractedTextLength": row[9],
+                "processingStatus": row[10],
+            }
+            for row in rows
+        ]
+
+        return jsonify({"success": True, "materials": materials})
+    except Exception as e:
+        print(f"[ERROR] get_materials_by_submission: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route("/process_material_submission", methods=["POST"])
-def process_material():
+def process_material_submission():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     data = request.get_json()
     s3_url = data.get("s3_url")
+    s3_key = data.get("s3_key")
     title = data.get("title", "untitled")
     file_type = data.get("fileType", "application/octet-stream")
-    course_id = data.get("courseId")
-    submission_id = data.get("submissionId")
-    owner_type = data.get("ownerType", "submissionMaterial")
+    course_id = data.get("course_id") or data.get("courseId")
+    submission_id = data.get("submission_id") or data.get("submissionId") or None
+    owner_type = data.get("ownerType", "courseMaterial")
 
-    if not s3_url:
-        return jsonify({"error": "s3_url required"}), 400
+    if not s3_url or not course_id:
+        return jsonify({"success": False, "error": "Missing s3_url or course_id"}), 400
 
     try:
-        local_path = download_file(s3_url)
-        text = extract_text(local_path)
-        chunks = recursive_chunk(text, chunk_size=500, chunk_overlap=50)
-        embeddings = model.encode(chunks, convert_to_numpy=True).astype(np.float32)
-
-        # insert material
         cursor.execute(
             """
-            INSERT INTO materials (courseId, submissionId, ownerType, title, s3_url, fileType, chunkCount, extractedTextLength, processingStatus)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'done')
+            INSERT INTO materials (
+                courseId, submissionId, ownerType, title, s3_url, s3_key, fileType,
+                chunkCount, extractedTextLength, processingStatus
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 'pending')
             """,
-            (
-                course_id,
-                submission_id,
-                owner_type,
-                title,
-                s3_url,
-                file_type,
-                len(chunks),
-                len(text),
-            ),
+            (course_id, submission_id, owner_type, title, s3_url, s3_key, file_type),
         )
-        material_db_id = cursor.lastrowid
 
-        # insert chunks
-        for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
-            faiss_id = np.random.randint(1, 1 << 60, dtype=np.int64)
-            faiss_submission_index.add_with_ids(
-                np.array([embedding]), np.array([faiss_id], dtype=np.int64)
-            )
-            cursor.execute(
-                """
-                INSERT INTO chunks (materialId, faissId, text, embedding)
-                VALUES (?, ?, ?, ?)
-                """,
-                (
-                    material_db_id,
-                    int(faiss_id),
-                    chunk_text,
-                    json.dumps(embedding.tolist()),
-                ),
-            )
-
-        faiss.write_index(faiss_submission_index, submission_index_file)
+        material_id = cursor.lastrowid
         conn.commit()
-        os.unlink(local_path)
 
         return jsonify(
             {
-                "id": material_db_id,
+                "success": True,
+                "message": "Material metadata saved successfully",
+                "_id": material_id,
                 "title": title,
                 "s3_url": s3_url,
-                "numChunks": len(chunks),
+                "s3_key": s3_key,
+                "course_id": course_id,
+                "submission_id": submission_id,
+                "processingStatus": "pending",
             }
         )
     except Exception as e:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        print(f"[ERROR] process_material_submission: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
     finally:
         conn.close()
 
 
-@app.route("/process_submission/<int:submission_id>", methods=["POST"])
-def process_submission(submission_id):
+@app.route("/process_submission", methods=["POST"])
+def process_submission():
+    data = request.get_json()
+    submission_id = data.get("submission_id")
+    material_ids = data.get("material_ids", [])
+
+    if not submission_id or not material_ids:
+        return jsonify({"error": "Missing submission_id or material_ids"}), 400
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
-    cursor.execute("SELECT fileUrls FROM submissions WHERE id = ?", (submission_id,))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return jsonify({"error": "Submission not found"}), 404
-
-    try:
-        file_urls = json.loads(row[0])  # parse JSON string
-    except Exception:
-        conn.close()
-        return jsonify({"error": "Invalid fileUrls format"}), 400
-
     results = []
 
-    for file_url in file_urls:
-        try:
-            # Insert material
+    try:
+        for material_id in material_ids:
+            # --- Lấy thông tin material ---
             cursor.execute(
-                """
-                INSERT INTO materials (courseId, submissionId, ownerType, title, s3_url, fileType, processingStatus)
-                VALUES (?, ?, ?, ?, ?, ?, 'processing')
-                """,
-                (
-                    None,
-                    submission_id,
-                    "submissionMaterial",
-                    os.path.basename(file_url),
-                    file_url,
-                    "application/octet-stream",
-                ),
+                "SELECT s3_url, title FROM materials WHERE id = ?", (material_id,)
             )
-            material_id = cursor.lastrowid
+            row = cursor.fetchone()
+            if not row:
+                results.append(
+                    {"materialId": material_id, "error": "Material not found"}
+                )
+                continue
 
-            # Download + extract
-            local_path = download_file(file_url)
+            s3_url, title = row
+
+            # --- Cập nhật trạng thái sang 'processing' ---
+            cursor.execute(
+                "UPDATE materials SET processingStatus='processing' WHERE id=?",
+                (material_id,),
+            )
+            conn.commit()
+
+            # --- Tải và xử lý file ---
+            local_path = download_file(s3_url)
             text = extract_text(local_path)
 
-            # Chunk + embed
             chunks = recursive_chunk(text, chunk_size=500, chunk_overlap=50)
             embeddings = model.encode(chunks, convert_to_numpy=True).astype(np.float32)
 
+            # --- Lưu chunks + embeddings ---
             for chunk_text, embedding in zip(chunks, embeddings):
                 faiss_id = np.random.randint(1, 1 << 60, dtype=np.int64)
                 faiss_submission_index.add_with_ids(
@@ -485,85 +640,109 @@ def process_submission(submission_id):
                     ),
                 )
 
-            # Update material status
+            # --- Cập nhật material ---
             cursor.execute(
                 """
                 UPDATE materials
-                SET processingStatus='done', chunkCount=?, extractedTextLength=?
+                SET submissionId=?, processingStatus='done',
+                    chunkCount=?, extractedTextLength=?
                 WHERE id=?
                 """,
-                (len(chunks), len(text), material_id),
+                (submission_id, len(chunks), len(text), material_id),
             )
 
             conn.commit()
+
+            # --- Xóa file tạm ---
             try:
                 os.unlink(local_path)
             except FileNotFoundError:
                 pass
 
-            results.append({"fileUrl": file_url, "numChunks": len(chunks)})
+            results.append(
+                {
+                    "materialId": material_id,
+                    "title": title,
+                    "numChunks": len(chunks),
+                    "status": "done",
+                }
+            )
 
-        except Exception as e:
-            conn.rollback()
-            results.append({"fileUrl": file_url, "error": str(e)})
+        # --- Ghi FAISS index ---
+        faiss.write_index(faiss_submission_index, submission_index_file)
 
-    faiss.write_index(faiss_submission_index, submission_index_file)
-    conn.close()
+        return jsonify(
+            {"success": True, "submission_id": submission_id, "results": results}
+        )
+    except Exception as e:
+        conn.rollback()
+        print(f"[ERROR] process_submission: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        conn.close()
 
-    return jsonify({"submissionId": submission_id, "results": results})
 
-
-@app.route("/delete_submission/<int:submission_id>", methods=["DELETE"])
+@app.route("/delete_submission/<submission_id>", methods=["DELETE"])
 def delete_submission(submission_id):
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
     cursor = conn.cursor()
 
     try:
-        # Fetch FAISS ids from submission_chunks
+        # --- Lấy tất cả material id của submission ---
         cursor.execute(
-            "SELECT faissId FROM submission_chunks WHERE submissionId = ?",
-            (submission_id,),
+            "SELECT id, s3_key FROM materials WHERE submissionId = ?", (submission_id,)
         )
-        chunk_rows = cursor.fetchall()
+        material_rows = cursor.fetchall()
+        material_ids = [r[0] for r in material_rows]
+        s3_key = [r[1] for r in material_rows if r[1]]
 
-        if not chunk_rows:
+        if not material_ids:
             return (
                 jsonify(
-                    {"success": False, "message": "No chunks found for this submission"}
+                    {
+                        "success": False,
+                        "message": "No materials found for this submission",
+                    }
                 ),
                 404,
             )
 
+        # --- Lấy FAISS ids từ chunks ---
+        cursor.execute(
+            f"SELECT faissId FROM chunks WHERE materialId IN ({','.join(['?']*len(material_ids))})",
+            material_ids,
+        )
+        chunk_rows = cursor.fetchall()
         faiss_ids = [r[0] for r in chunk_rows if r[0] is not None]
 
-        # Remove from FAISS if embeddings exist
+        # --- Xóa chunks trước ---
+        cursor.execute(
+            f"DELETE FROM chunks WHERE materialId IN ({','.join(['?']*len(material_ids))})",
+            material_ids,
+        )
+        chunk_count = cursor.rowcount
+
+        # --- Xóa materials ---
+        cursor.execute("DELETE FROM materials WHERE submissionId = ?", (submission_id,))
+        materials_deleted = cursor.rowcount
+
+        # --- Cập nhật FAISS nếu cần ---
         if faiss_ids:
             ids_array = np.array(faiss_ids, dtype=np.int64)
             faiss_submission_index.remove_ids(ids_array)
-
-        # Count chunks before deletion
-        cursor.execute(
-            "SELECT COUNT(*) FROM submission_chunks WHERE submissionId = ?",
-            (submission_id,),
-        )
-        chunk_count = cursor.fetchone()[0]
-
-        # Delete chunks in SQLite
-        cursor.execute(
-            "DELETE FROM submission_chunks WHERE submissionId = ?", (submission_id,)
-        )
-
-        # Commit changes and update FAISS index
-        conn.commit()
-        if faiss_ids:
             faiss.write_index(faiss_submission_index, submission_index_file)
+
+        conn.commit()
 
         return jsonify(
             {
                 "success": True,
                 "message": f"Deleted submission {submission_id}",
                 "chunksDeleted": chunk_count,
+                "materialsDeleted": materials_deleted,
                 "embeddingsDeleted": len(faiss_ids),
+                "s3_key": s3_key,
             }
         )
 
@@ -578,41 +757,51 @@ def delete_submission(submission_id):
 @app.route("/delete_all_submissions", methods=["DELETE"])
 def delete_all_submissions():
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON;")
     cursor = conn.cursor()
 
     try:
-        # Fetch all FAISS ids from submission chunks
+        # --- Lấy tất cả materials có submissionId (tức là thuộc về bài nộp) ---
         cursor.execute(
-            "SELECT faissId FROM submission_chunks WHERE submissionId IS NOT NULL"
+            "SELECT id, s3_key FROM materials WHERE submissionId IS NOT NULL"
         )
-        chunk_rows = cursor.fetchall()
+        material_rows = cursor.fetchall()
 
-        if not chunk_rows:
+        if not material_rows:
             return (
-                jsonify(
-                    {"success": False, "message": "No chunks found for any submission"}
-                ),
+                jsonify({"success": False, "message": "No submissions found"}),
                 404,
             )
 
+        material_ids = [r[0] for r in material_rows]
+        s3_keys = [r[1] for r in material_rows if r[1]]
+
+        # --- Lấy tất cả FAISS ids từ các chunks liên kết ---
+        placeholders = ",".join(["?"] * len(material_ids))
+        cursor.execute(
+            f"SELECT faissId FROM chunks WHERE materialId IN ({placeholders})",
+            material_ids,
+        )
+        chunk_rows = cursor.fetchall()
         faiss_ids = [r[0] for r in chunk_rows if r[0] is not None]
 
-        # Remove from FAISS index if embeddings exist
+        # --- Xóa embeddings trong FAISS index nếu có ---
         if faiss_ids:
             ids_array = np.array(faiss_ids, dtype=np.int64)
             faiss_submission_index.remove_ids(ids_array)
             faiss.write_index(faiss_submission_index, submission_index_file)
 
-        # Delete all submission-related chunks in SQLite
-        cursor.execute("DELETE FROM submission_chunks WHERE submissionId IS NOT NULL")
-        deleted_count = cursor.rowcount
+        # --- Xóa tất cả materials (các chunks sẽ tự xóa nhờ ON DELETE CASCADE) ---
+        cursor.execute("DELETE FROM materials WHERE submissionId IS NOT NULL")
+        deleted_materials = cursor.rowcount
 
         conn.commit()
 
         return jsonify(
             {
                 "success": True,
-                "message": f"Deleted all submissions, removed {deleted_count} chunks and {len(faiss_ids)} embeddings",
+                "message": f"Deleted all submissions: removed {len(faiss_ids)} embeddings and {deleted_materials} materials",
+                "s3_keys": s3_keys,
             }
         )
 
