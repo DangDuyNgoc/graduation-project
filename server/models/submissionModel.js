@@ -13,8 +13,7 @@ const submissionSchema = new mongoose.Schema({
     },
     materials: [
         {
-            type: mongoose.Types.ObjectId,
-            ref: "material",
+            type: String,
         }
     ],
     contentHash: {

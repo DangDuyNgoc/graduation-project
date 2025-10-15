@@ -12,6 +12,7 @@ import courseRoute from "./routes/courseRoute.js";
 import assignmentRoute from "./routes/assignmentRoute.js";
 import submissionRoute from "./routes/submissionRoute.js";
 import chunkRoute from "./routes/chunkRoute.js";
+import plagiarismRouter from "./routes/plagiarismReportRoute.js";
 
 dotenv.config();
 
@@ -45,6 +46,7 @@ app.use("/api/course", courseRoute);
 app.use("/api/assignment", assignmentRoute);
 app.use("/api/submission", submissionRoute);
 app.use("/api/chunk", chunkRoute);
+app.use("/api/plagiarism", plagiarismRouter)
 
 app.listen(PORT, () => {
     console.log(`Server in running on ${process.env.DEV_MODE} mode on port ${PORT}`.bgCyan.white);

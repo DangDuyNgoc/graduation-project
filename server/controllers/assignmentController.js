@@ -1,3 +1,4 @@
+import axios from "axios";
 import assignmentModel from "../models/assignmentModel.js";
 import courseModel from "../models/courseModel.js";
 import materialsModel from "../models/materialModel.js";
@@ -395,29 +396,42 @@ export const deleteAssignmentController = async (req, res) => {
 
         // find all submission of this assignment
         const submissions = await submissionModel.find({ assignment: id });
-        const submissionMaterialIds = submissions.flatMap(s => s.materials);
 
         // delete materials of submissions 
-        if (submissionMaterialIds.length > 0) {
-            const submissionMaterials = await materialsModel.find({ _id: { $in: submissionMaterialIds } });
+        const flaskResults = await Promise.allSettled(
+          submissions.map((sub) =>
+            axios.delete(
+              `http://localhost:5000/delete_submission/${sub._id.toString()}`
+            )
+          )
+        );
+        const flaskKeys = flaskResults
+          .filter((r) => r.status === "fulfilled" && r.value?.data?.success)
+          .flatMap((r) => r.value.data.s3_key || [])
+          .filter(Boolean);
 
-            if (submissionMaterials.length > 0) {
-                const submissionKeys = submissionMaterials.map(m => m.key);
-                await deleteObjects(submissionKeys);
-            }
+        flaskResults
+          .filter((r) => r.status === "rejected" || !r.value?.data?.success)
+          .forEach((r) => {
+            console.error(
+              "Flask deletion failed:",
+              r.reason?.message || r.value?.data?.message || "Unknown error"
+            );
+          });
 
-            await materialsModel.deleteMany({ _id: { $in: submissionMaterialIds } });
-        }
-
-        // delete submissions
-        await submissionModel.deleteMany({ assignment: id });
+        const assignmentMaterials = assignment.materials || [];
+        const allKeys = [
+          ...flaskKeys,
+          ...assignmentMaterials.map((m) => m.key),
+        ].filter(Boolean);
 
         // delete all materials from s3
-        if (assignment.materials && assignment.materials.length > 0) {
-            const materialKeys = assignment.materials.map(mat => mat.key);
-            await deleteObjects(materialKeys);
+        if (allKeys.length > 0) {
+          await deleteObjects(allKeys);
         }
 
+        // delete submissions and assignment
+        await submissionModel.deleteMany({ assignment: id });
         await assignmentModel.findByIdAndDelete(id);
 
         res.status(200).send({
@@ -544,24 +558,31 @@ export const deleteAllAssignmentController = async (req, res) => {
             });
         };
 
-        // get the list Ids of assignments
-        const assignmentIds = assignments.map(a => a._id);
-
-        // find all submissions related assignments
-        const submissions = await submissionModel.find({
-            assignment: { $in: assignmentIds }
-        });
-
-        // get all materials from submission
-        const materialIds = submissions.flatMap(s => s.materials);
-        const submissionMaterials = await materialsModel.find({ _id: { $in: materialIds } });
+        // delete material and return s3_key
+        let s3_key_map = [];
+        let mess = null;
+        try {
+          const flaskRes = await axios.delete(
+            `http://localhost:5000/delete_all_submissions`
+          );
+          const { success, s3_keys, message } = flaskRes.data || {};
+          mess = message;
+          if (success && Array.isArray(s3_keys) && s3_keys.length > 0) {
+            s3KeysFromFlask = s3_keys;
+          }
+        } catch (error) {
+          console.error(
+            "Failed to delete all submissions in Flask: ",
+            error.message
+          );
+        }
 
         // get all materials from assignments
         const assignmentMaterials = assignments.flatMap(a => a.materials);
 
         // create a list of key file S3 to delete
         const s3Keys = [
-            ...submissionMaterials.map(m => m.key),
+            ...s3_key_map,
             ...assignmentMaterials.map(m => m.key),
         ].filter(Boolean);
 
@@ -569,18 +590,15 @@ export const deleteAllAssignmentController = async (req, res) => {
             await deleteObjects(s3Keys);
         };
 
-        // Delete related material
-        await materialsModel.deleteMany({ _id: { $in: materialIds } });
-
         // delete related submission
-        await submissionModel.deleteMany({ assignment: { $in: assignmentIds } });
+        await submissionModel.deleteMany({});
 
         // delete assignments
-        const result = await assignmentModel.deleteMany({ _id: { $in: assignmentIds } });
+        await assignmentModel.deleteMany({});
 
         return res.status(200).send({
             success: true,
-            message: `Deleted ${result.deletedCount} assignments, ${submissions.length} submissions, and ${materialIds.length} materials successfully`
+            message: mess
         });
 
     } catch (error) {

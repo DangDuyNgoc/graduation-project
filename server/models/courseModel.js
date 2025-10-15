@@ -29,8 +29,7 @@ const courseSchema = new mongoose.Schema({
     ],
     materials: [
         {
-            type: mongoose.Types.ObjectId,
-            ref: "material",
+            type: String,
         }
     ]
 }, { timestamps: true });

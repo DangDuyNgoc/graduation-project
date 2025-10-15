@@ -2,7 +2,6 @@ import axios from "axios";
 import crypto from "crypto";
 
 import assignmentModel from "../models/assignmentModel.js";
-import materialsModel from "../models/materialModel.js";
 import submissionModel from "../models/submissionModel.js";
 import userModel from "../models/userModel.js";
 import { deleteObjects } from "../utils/deleteObject.js";
@@ -10,79 +9,102 @@ import { putObject } from "../utils/putObject.js";
 import contract from "../utils/blockchain.js";
 
 export const uploadSubmissionController = async (req, res) => {
-    try {
-        const { id } = req.params; // ID of assignment
+  try {
+    const { id } = req.params; // ID of assignment
 
-        if (!id) {
-            return res.status(400).send({
-                success: false,
-                message: "Please provide ID of assignment"
-            })
-        };
+    if (!id) {
+      return res.status(400).send({
+        success: false,
+        message: "Please provide ID of assignment",
+      });
+    }
 
-        if (!req.files || req.files.length === 0) {
-            return res.status(400).send({
-                success: false,
-                message: "Please upload at least one file"
-            });
-        };
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).send({
+        success: false,
+        message: "Please upload at least one file",
+      });
+    }
 
-        const assignments = await assignmentModel.findById(id);
-        if (!assignments) {
-            return res.status(404).send({
-                success: false,
-                message: "Assignment not found"
-            })
-        };
+    const assignment = await assignmentModel.findById(id);
+    if (!assignment) {
+      return res.status(404).send({
+        success: false,
+        message: "Assignment not found",
+      });
+    }
+    
+    // check late submission
+    const now = new Date();
+    let isLate = false;
+    let lateDuration = 0;
+    let status = "Submitted";
 
-        // check late submission
-        const now = new Date();
-        let isLate = false;
-        let lateDuration = 0;
-        let status = "Submitted";
+    if (assignment.dueDate && now > assignment.dueDate) {
+      if (!assignment.allowLateSubmission) {
+        return res.status(400).send({
+          success: false,
+          message:
+            "The submission deadline has passed. Late submissions are not allowed.",
+        });
+      }
 
-        if (assignments.dueDate && now > assignments.dueDate) {
-            if (!assignments.allowLateSubmission) {
-                return res.status(400).send({
-                    success: false,
-                    message: "The submission deadline has passed. Late submissions are not allowed."
-                });
-            };
+      isLate = true;
+      status = "Late Submitted";
+      lateDuration = now.getTime() - assignments.dueDate.getTime();
+    };
 
-            isLate = true;
-            status = "Late Submitted";
-            lateDuration = now.getTime() - assignments.dueDate.getTime();
-        };
+    const materialDocs = [];
+    const combinedHash = crypto.createHash("sha256");
 
-        const materialDocs = [];
-        let combinedHash = crypto.createHash("sha256");
+    for (const file of req.files) {
+      const fileName = `submission/${Date.now()}_${file.originalname}`;
+      const { url } = await putObject(file.buffer, fileName, file.mimetype);
 
-        // upload files to S3 and create material docs
-        for (const file of req.files) {
-            const fileName = `submission/${Date.now()}_${file.originalname}`;
-            const { url } = await putObject(file.buffer, fileName, file.mimetype)
+      combinedHash.update(file.buffer);
 
-            // update hash
-            combinedHash.update(file.buffer);
+      try {
+        const response = await axios.post(
+          `http://localhost:5000/process_material_submission`,
+          {
+            s3_url: url,
+            s3_key: fileName,
+            title: file.originalname,
+            fileType: file.mimetype,
+            course_id: assignment.courseId?.toString() || null,
+            submission_id: null,
+            ownerType: "submissionMaterial",
+          }
+        );
 
-            const material = new materialsModel({
-                submissionId: null,
-                title: file.originalname,
-                s3_url: url,
-                key: fileName,
-                fileType: file.mimetype,
-                ownerType: "submissionMaterial"
-            });
+        console.log("Flask processed material:", response.data);
 
-            await material.save();
-            materialDocs.push(material);
-        };
+        if (response.data?._id) {
+          materialDocs.push(response.data._id);
+        } else if (response.data?.id) {
+          materialDocs.push(response.data.id);
+        }
+      } catch (error) {
+        console.error(
+          "Error sending material to Flask:",
+          error.response?.data || error.message
+        );
+      }
+    }
 
-        // get combined hash of all files
-        const contentHash = combinedHash.digest("hex");
+    // get combined hash of all files
+    const contentHash = combinedHash.digest("hex");
 
-        // create submission
-        const submission = new submissionModel({
+    // check user info
+    if (!req.user || !req.user._id) {
+      return res.status(401).send({
+        success: false,
+        message: "Unauthorized: Missing user info",
+      });
+    }
+
+    // create submission
+    const submission = new submissionModel({
             student: req.user._id,
             assignment: id,
             materials: materialDocs.map(m => m._id),
@@ -90,57 +112,61 @@ export const uploadSubmissionController = async (req, res) => {
             isLate,
             status,
             lateDuration
-        });
+    });
 
-        await submission.save();
+    await submission.save();
 
-        // update submission into materials
-        await materialsModel.updateMany(
-            { _id: { $in: materialDocs.map(m => m._id) } },
-            { $set: { submissionId: submission._id } }
-        );
-
-        // save hash on blockchain
-        try {
-            const tx = await contract.storeSubmission(
-                submission.student._id.toString(),
-                id.toString(),
-                contentHash
-            );
-            await tx.wait(); // wait for transaction to be mined
-        } catch (error) {
-            console.error("Error storing submission on blockchain:", error);
-        }
-
-        // call flask api to process the submission
-        try {
-            const response = await axios.post(`http://localhost:5000/process_submission/${submission._id}`);
-            console.log("Flask processing result:", response.data);
-        } catch (error) {
-            console.error("Error calling Flask API:", error.response?.data || error.message);
-        }
-
-        res.status(200).send({
-            success: true,
-            message: isLate ? `Submission submitted successfully(LATE by ${Math.floor(lateDuration / 60000)
-                } minutes)`
-                : "Submission submitted successfully",
-            submission
-        });
-
+    // save hash on blockchain
+    try {
+      const tx = await contract.storeSubmission(
+        submission.student._id.toString(),
+        id.toString(),
+        contentHash
+      );
+      await tx.wait(); // wait for transaction to be mined
     } catch (error) {
-        console.log("Error in upload submission: ", error);
-        return res.status(500).send({
-            success: false,
-            message: "Internal server error"
-        });
+      console.error("Error storing submission on blockchain:", error);
     }
+
+    // call flask api to process the submission
+    try {
+      const response = await axios.post(
+        `http://localhost:5000/process_submission`,
+        {
+          submission_id: submission._id.toString(),
+          material_ids: materialDocs,
+        }
+      );
+      console.log("Flask processing result:", response.data);
+    } catch (error) {
+      console.error(
+        "Error calling Flask API:",
+        error.response?.data || error.message
+      );
+    }
+
+    res.status(200).send({
+      success: true,
+      message: isLate
+        ? `Submission submitted successfully (LATE by ${Math.floor(
+            lateDuration / 60000
+          )} minutes)`
+        : "Submission submitted successfully",
+      submission,
+    });
+  } catch (error) {
+    console.log("Error in upload submission:", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+    });
+  }
 };
 
 export const updateSubmissionController = async (req, res) => {
     const { id } = req.params; // submission id 
-    let { keepOld } = req.body;// flag to keep old files, true = append, false = replace
-    keepOld = keepOld === "true" || keepOld === true;
+    let { keepOld } = req.body; // flag to keep old files, true = append, false = replace
+    keepOld = keepOld.toString().toLowerCase() === "true" ? true : false;
 
     if (!id) {
         return res.status(400).send({
@@ -201,63 +227,67 @@ export const updateSubmissionController = async (req, res) => {
 
     // if replace keepOld = false, delete chunks + old materials
     if (!keepOld) {
-        // call flask api to delete related chunks schema
-        try {
-            await axios.post(`http://localhost:5000/delete_submission/${submission._id}`);
-        } catch (error) {
-            console.error("Error calling Flask API in deleting files:", error.response?.data || error.message);
-        }
+       try {
+         const response = await axios.delete(
+           `http://localhost:5000/delete_submission/${submission._id.toString()}`
+         );
+         const s3_keys = response.data?.s3_key || [];
+         console.log("Flask deleted submission and returned S3 keys:", s3_keys);
 
-        // delete old material (DB + S3)
-        const oldMaterials = await materialsModel.find({ _id: { $in: submission.materials } });
-        if (oldMaterials.length > 0) {
-            const oldKeys = oldMaterials.map(m => m.key);
-            await deleteObjects(oldKeys);
-            await materialsModel.deleteMany({ _id: { $in: submission.materials } });
-        };
-
-        submission.materials = [];
-    }
+         if (Array.isArray(s3_keys) && s3_keys.length > 0) {
+           await deleteObjects(s3_keys);
+           console.log("Deleted old S3 files successfully!");
+         }
+       } catch (error) {
+         console.error(
+           "Error deleting old submission or S3 files:",
+           error.response?.data || error.message
+         );
+       }
+     }
 
 
     // upload the new file to S3
-    const newMaterialDocs = [];
+    const newMaterialIds = [];
     let combinedHash = crypto.createHash("sha256");
 
-    if (keepOld && submission.materials.length > 0) {
-        const oldMaterials = await materialsModel.find({ _id: { $in: submission.materials } });
-        for (const old of oldMaterials) {
-            const res = await axios.get(old.s3_url, { responseType: "arraybuffer" });
-            combinedHash.update(Buffer.from(res.data));
+    for (const file of req.files) {
+      const fileName = `submission/${Date.now()}_${file.originalname}`;
+      const { url } = await putObject(file.buffer, fileName, file.mimetype);
+      combinedHash.update(file.buffer);
+
+      try {
+        const response = await axios.post(
+          `http://localhost:5000/process_material_submission`,
+          {
+            s3_url: url,
+            s3_key: fileName,
+            title: file.originalname,
+            fileType: file.mimetype,
+            course_id: assignments.courseId?.toString() || null,
+            submission_id: submission._id.toString(),
+            ownerType: "submissionMaterial",
+          }
+        );
+
+        if (response.data?._id) {
+          newMaterialIds.push(response.data._id);
         }
+      } catch (error) {
+        console.error(
+          "Error sending new material to Flask:",
+          error.response?.data || error.message
+        );
+      }
     }
 
-    for (const file of req.files) {
-        const fileName = `submission/${Date.now()}_${file.originalname}`;
-        const { url } = await putObject(file.buffer, fileName, file.mimetype);
-
-        // update hash
-        combinedHash.update(file.buffer);
-
-        const material = new materialsModel({
-            submissionId: submission._id,
-            ownerType: "submissionMaterial",
-            title: file.originalname,
-            s3_url: url,
-            key: fileName,
-            fileType: file.mimetype,
-        });
-
-        await material.save();
-        newMaterialDocs.push(material);
-    };
-
     // update submission
-    submission.materials = [...submission.materials, ...newMaterialDocs.map(m => m._id)];
     submission.isLate = isLate;
     submission.lateDuration = lateDuration;
     submission.status = status;
     submission.contentHash = combinedHash.digest("hex");
+    if (!keepOld) submission.materials = [];
+    submission.materials = [...submission.materials, ...newMaterialIds];
     await submission.save();
 
     // save hash on blockchain
@@ -274,9 +304,19 @@ export const updateSubmissionController = async (req, res) => {
 
     // call flask api to process the submission
     try {
-        await axios.post(`http://localhost:5000/process_submission/${submission._id}`);
+      const response = await axios.post(
+        `http://localhost:5000/process_submission`,
+        {
+          submission_id: submission._id.toString(),
+          material_ids: newMaterialIds,
+        }
+      );
+      console.log("Flask reprocessed submission:", response.data);
     } catch (error) {
-        console.error("Error calling Flask API in processing submission:", error.response?.data || error.message);
+      console.error(
+        "Error calling Flask API to process submission:",
+        error.response?.data || error.message
+      );
     }
 
     res.status(200).send({
@@ -309,14 +349,35 @@ export const getAllSubmissionController = async (req, res) => {
 
         const submissions = await submissionModel.find({ assignment: id })
             .populate("assignment")
-            .populate("materials")
             .populate("student")
 
-        res.status(200).send({
-            success: true,
-            message: "Get all submissions successfully",
-            submissions,
-        });
+            let materials = [];
+            for (const sub of submissions) {
+              const subId = sub._id.toString();
+              try {
+                const flaskRes = await axios.get(
+                  `http://localhost:5000/get_materials_by_submission/${subId}`
+                );
+                materials = flaskRes.data.materials || [];
+              } catch (error) {
+                console.error(
+                  "Error fetching materials from Flask:",
+                  error.response?.data || error.message
+                );
+                sub.materials = [];
+              }
+            }
+
+            const result = {
+              ...submissions,
+              materials,
+            };
+
+            res.status(200).send({
+              success: true,
+              message: "Get all submissions successfully",
+              result,
+            });
     } catch (error) {
         console.log("Error in get all submissions: ", error);
         return res.status(500).send({
@@ -339,7 +400,6 @@ export const getSubmissionController = async (req, res) => {
         };
 
         const submission = await submissionModel.findById(id)
-            .populate("materials", "title s3_url fileType uploadedAt")
             .populate("assignment")
             .populate("student");
 
@@ -350,6 +410,23 @@ export const getSubmissionController = async (req, res) => {
                 message: "Submission not found"
             })
         }
+
+        let materials = [];
+        try {
+          const flaskRes = await axios.get(
+            `http://localhost:5000/get_materials_by_submission/${submission._id.toString()}`
+          );
+          materials = flaskRes.data.materials || [];
+        } catch (error) {
+          console.error(
+            "Error fetching materials from Flask:",
+            error.response?.data || error.message
+          );
+        }
+        const result = {
+          ...submission.toObject(),
+          materials,
+        };
 
         // fetch submissions from blockchain
         let blockchainSubmissions = [];
@@ -374,7 +451,7 @@ export const getSubmissionController = async (req, res) => {
         return res.status(200).send({
             success: true,
             message: "Fetched Submission Successfully",
-            submission,
+            result,
             blockchainSubmissions
         })
 
@@ -408,20 +485,39 @@ export const getStudentSubmissionsController = async (req, res) => {
 
         const submission = await submissionModel.find({ student: id })
             .populate("assignment")
-            .populate("materials", "title s3_url fileType uploadedAt")
             .populate("student");
-
-        if (!submission) {
+      
+        if (!submission || submission.length === 0) {
             return res.status(404).send({
                 success: false,
                 message: "Submission not found"
             })
         }
 
+       let materials = [];
+       for (const sub of submission) {
+         try {
+           const flaskRes = await axios.get(
+             `http://localhost:5000/get_materials_by_submission/${sub._id.toString()}`
+           );
+           materials = flaskRes.data?.materials || [];
+         } catch (error) {
+           console.error(
+             "Error fetching materials from Flask:",
+             error.response?.data || error.message
+           );
+           materials = [];
+         }
+       }
+       const result = {
+          ...submission,
+          materials,
+        };
+
         return res.status(200).send({
             success: true,
             message: "Fetched get all submission by student id successfully",
-            submission
+            result
         });
 
     } catch (error) {
@@ -450,24 +546,23 @@ export const deleteOneSubmissionController = async (req, res) => {
                 message: "Submission not found"
             });
         }
-        const material = await materialsModel.find({ _id: { $in: submission.materials } });
-        if (!material) {
-            return res.status(404).send({
-                success: false,
-                message: "Material not found"
-            });
-        };
 
-        // delete material from S3
-        const keys = material.map(m => m.key);
-        await deleteObjects(keys);
-        await materialsModel.deleteMany({ _id: { $in: submission.materials } });
-
-        // call flask api to delete related chunks schema
+        // call flask api to delete related chunks schema and delete material from S3
+        let flaskKeys = [];
         try {
-            await axios.post(`http://localhost:5000/delete_submission/${submission._id}`);
+          const flaskRes = await axios.delete(
+            `http://localhost:5000/delete_submission/${submission._id.toString()}`
+          );
+          // delete material from S3
+          if (flaskRes.data?.s3_key?.length > 0) {
+            flaskKeys = flaskRes.data.s3_key;
+            await deleteObjects(flaskKeys);
+          }
         } catch (error) {
-            console.error("Error calling Flask API:", error.response?.data || error.message);
+          console.error(
+            "Error calling Flask API:",
+            error.response?.data || error.message
+          );
         }
 
         await submissionModel.findByIdAndDelete(id);
@@ -513,22 +608,27 @@ export const deleteAllSubmissionsController = async (req, res) => {
             });
         };
 
-        for (const submission of submissions) {
-            const materials = await materialsModel.find({ _id: { $in: submission.materials } });
-            if (materials.length > 0) {
-                const keys = materials.map(m => m.key);
-                await deleteObjects(keys);
-                await materialsModel.deleteMany({ _id: { $in: submission.materials } });
-            };
-            await submissionModel.findByIdAndDelete(submission._id);
-        };
-
-        // call flask api to delete related chunks schema
+        let s3Keys = [];
         try {
-            await axios.delete('http://localhost:5000/delete_all_submissions');
+          const flaskRes = await axios.delete(
+            "http://localhost:5000/delete_all_submissions"
+          );
+          if (flaskRes.data?.s3_keys?.length > 0) {
+            s3Keys = flaskRes.data.s3_keys;
+          }
         } catch (error) {
-            console.error("Error calling Flask API:", error.response?.data || error.message);
+          console.error(
+            "Error calling Flask API:",
+            error.response?.data || error.message
+          );
         }
+
+        // delete file on S3 if flask return key
+        if (s3Keys.length > 0) {
+          await deleteObjects(s3Keys);
+        }
+
+        await submissionModel.deleteMany({ assignment: id });
 
         return res.status(200).send({
             success: true,
