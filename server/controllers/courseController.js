@@ -95,9 +95,10 @@ export const createCourseController = async (req, res) => {
     }
 };
 
-export const getCourseController = async (req, res) => {
+export const getCourseByIdController = async (req, res) => {
     try {
         const { id } = req.params;
+        const userId = req.user._id;
 
         if (!id) {
             return res.status(400).send({
@@ -129,6 +130,19 @@ export const getCourseController = async (req, res) => {
         }
 
         const result = {...course.toObject(), materials}
+
+        // check enrolled user
+        const isEnrolled = course.studentIds.some(
+            (studentId) => studentId.toString() === userId.toString()
+        );
+
+        if (!isEnrolled) {
+            return res.status(403).json({
+                success: false,
+                message: "You have not enrolled in this course yet.",
+                enrolled: false,
+            });
+        };
 
         return res.status(200).send({
             success: true,

@@ -81,6 +81,7 @@ export const uploadSubmissionController = async (req, res) => {
           materialDocs.push(response.data._id);
         } else if (response.data?.id) {
           materialDocs.push(response.data.id);
+          r;
         }
       } catch (error) {
         console.error(
@@ -115,9 +116,12 @@ export const uploadSubmissionController = async (req, res) => {
 
     // save hash on blockchain
     try {
-      const tx = await contract.storeSubmission(id.toString(), contentHash);
+      const tx = await contract.storeSubmission(
+        submission.student._id.toString(),
+        id.toString(),
+        contentHash
+      );
       await tx.wait(); // wait for transaction to be mined
-      console.log("Submission stored on blockchain with hash:", contentHash);
     } catch (error) {
       console.error("Error storing submission on blockchain:", error);
     }
@@ -223,7 +227,6 @@ export const updateSubmissionController = async (req, res) => {
          const response = await axios.delete(
            `http://localhost:5000/delete_submission/${submission._id.toString()}`
          );
-
          const s3_keys = response.data?.s3_key || [];
          console.log("Flask deleted submission and returned S3 keys:", s3_keys);
 
@@ -284,9 +287,12 @@ export const updateSubmissionController = async (req, res) => {
 
     // save hash on blockchain
     try {
-        const tx = await contract.storeSubmission(submission.assignment._id.toString(), submission.contentHash);
+        const tx = await contract.storeSubmission(
+            submission.student._id.toString(),
+            submission.assignment._id.toString(),
+            submission.contentHash
+        );
         await tx.wait(); // wait for transaction to be mined
-        console.log("Submission stored on blockchain with hash:", tx.hash);
     } catch (error) {
         console.error("Error storing submission on blockchain:", error);
     }
@@ -392,6 +398,7 @@ export const getSubmissionController = async (req, res) => {
             .populate("assignment")
             .populate("student");
 
+
         if (!submission) {
             return res.status(404).send({
                 success: false,
@@ -416,10 +423,31 @@ export const getSubmissionController = async (req, res) => {
           materials,
         };
 
+        // fetch submissions from blockchain
+        let blockchainSubmissions = [];
+        try {
+            const studentId = submission.student._id.toString();
+            const count = await contract.getSubmissionCount(studentId);
+            for (let i = 0; i < count; i++) {
+                const [assignmentId, contentHash, timestamp] = await contract.getSubmission(
+                    studentId,
+                    i
+                );
+                blockchainSubmissions.push({
+                    assignmentId,
+                    contentHash,
+                    timestamp: Number(timestamp)
+                });
+            }
+        } catch (err) {
+            console.error("Error fetching blockchain submissions:", err);
+        }
+
         return res.status(200).send({
             success: true,
             message: "Fetched Submission Successfully",
-            result
+            result,
+            blockchainSubmissions
         })
 
     } catch (error) {
@@ -610,17 +638,18 @@ export const deleteAllSubmissionsController = async (req, res) => {
     }
 };
 
+// verify submission on blockchain
 export const verifySubmissionBlockchainController = async (req, res) => {
     try {
-        const { studentId, assignmentId, hash } = req.body;
+        const { studentId, assignmentId, contentHash } = req.body;
 
-        if (!studentId || !assignmentId || !hash) {
+        if (!studentId || !assignmentId || !contentHash) {
             return res.status(400).send({
                 success: false,
                 message: "Please provide studentId, assignmentId and hash"
             });
         }
-        const isValid = await contract.verifySubmission(studentId, assignmentId, hash);
+        const isValid = await contract.verifySubmission(studentId, assignmentId, contentHash);
 
         return res.status(200).send({
             success: true,
