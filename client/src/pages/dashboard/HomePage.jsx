@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -31,23 +31,21 @@ function HomePage() {
   }, []);
 
   const handleViewDetailCourse = (id) => {
-    
-    navigate(`/course/${id}`)
-  }
+    navigate(`/course/${id}`);
+  };
 
   return (
     <DashboardLayout>
-      <h1 className="text-2xl font-semibold mb-4">Student Dashboard</h1>
-      <p className="text-gray-600">
-        Welcome to your learning dashboard. Choose a section from the sidebar to
-        begin.
+      <h1 className="text-2xl font-semibold mb-2">Student Dashboard</h1>
+      <p className="text-gray-600 text-sm">
+        Welcome to your learning dashboard.
       </p>
       {loading ? (
         <div className="flex justify-center py-10">
           <LoaderCircle className="size-8 animate-spin text-primary" />
         </div>
       ) : (
-        <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
           {courses?.length > 0 ? (
             courses.map((course) => (
               <div
@@ -61,14 +59,22 @@ function HomePage() {
                 />
                 <div className="p-4">
                   <h2 className="text-lg font-semibold text-gray-800">
-                    {course.title}
+                    {course.name}
                   </h2>
                   <p className="text-sm text-gray-500 mb-2">
                     Instructor: {course.teacherId?.name || "Unknown"}
                   </p>
-                  <p className="text-sm text-gray-600 line-clamp-2">
-                    {course.description}
-                  </p>
+                  <div className="flex items-center mb-4">
+                    <p className="text-sm text-gray-600 flex item-center">
+                      <Users size={16} className="mr-1" />{" "}
+                      {course.studentIds?.length || 0} students enrolled
+                    </p>
+                    <span className="mx-3 w-1 h-1 bg-gray-400 rounded-full"></span>
+                    
+                    <p className="text-sm text-gray-600 line-clamp-2">
+                      {course.description}
+                    </p>
+                  </div>
                   <Button onClick={() => handleViewDetailCourse(course._id)}>
                     View Details
                   </Button>

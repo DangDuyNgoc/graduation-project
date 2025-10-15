@@ -17,8 +17,10 @@ const assignmentSchema = new mongoose.Schema({
         default: false
     },
     lateSubmissionDuration: {
-        type: Number, // in hours
-        default: 0
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 1440,
     },
     materials: [
         {

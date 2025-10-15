@@ -36,7 +36,7 @@ submissionRoute.get("/get-submission/:id",
     getSubmissionController
 );
 
-submissionRoute.get("/get-submission-by-student/:id",
+submissionRoute.get("/get-submission-by-student",
     isAuthenticated,
     getStudentSubmissionsController
 );

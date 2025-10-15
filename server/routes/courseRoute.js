@@ -12,13 +12,13 @@ import {
     removeStudentsFromCourseController,
     updateCourseController
 } from "../controllers/courseController.js";
-import uploadMaterials from "../middlewares/uploadMaterials.js";
+import uploadCourseFiles from "../middlewares/uploadCourseFiles.js";
 
 const courseRoute = express.Router();
 
 courseRoute.post(
     "/create-course",
-    uploadMaterials.array("materials", 10),
+    uploadCourseFiles,
     isAuthenticated,
     isTeacher,
     createCourseController
@@ -29,7 +29,7 @@ courseRoute.put(
     "/update-course/:id",
     isAuthenticated,
     isTeacher,
-    uploadMaterials.array("materials"),
+    uploadCourseFiles,
     updateCourseController
 );
 courseRoute.delete("/delete-course/:id",

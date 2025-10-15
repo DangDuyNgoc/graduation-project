@@ -7,6 +7,7 @@ import {
     deleteAssignmentController,
     deleteOneAssignmentMaterialController,
     getAllAssignmentController,
+    getAllAssignmentFotStudentController,
     getAssignmentByCourseController,
     getAssignmentController,
     updateAssignmentController
@@ -21,7 +22,11 @@ assignmentRoute.post("/create-assignment",
     uploadMaterials.array("materials", 10),
     createAssignmentController);
 assignmentRoute.get("/get-assignment-by-course/:id", getAssignmentByCourseController);
-assignmentRoute.get("/get-assignment/:id", getAssignmentController);
+assignmentRoute.get("/get-assignment/:id", isAuthenticated, getAssignmentController);
+assignmentRoute.get("/get-assignments-for-student/",
+    isAuthenticated,
+    getAllAssignmentFotStudentController
+);
 assignmentRoute.get("/get-all-assignments", getAllAssignmentController);
 assignmentRoute.put("/update-assignment/:id",
     isAuthenticated,

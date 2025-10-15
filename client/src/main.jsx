@@ -13,6 +13,11 @@ import Signup from "./pages/auth/Signup.jsx";
 import HomePage from "./pages/dashboard/HomePage";
 import UserProvider from "./context/UserProvider";
 import CourseDetail from "./components/Courses/CourseDetail";
+import AssignmentDetail from "./components/Assignment/AssignmentDetail";
+import AssignmentPage from "./pages/dashboard/AssignmentPage";
+import SubmissionsPage from "./pages/dashboard/SubmissionsPage";
+import ProfilePage from "./pages/dashboard/ProfilePage";
+import TeachersPage from "./pages/dashboard/TeachersPage";
 
 const root = createBrowserRouter([
   {
@@ -27,8 +32,28 @@ const root = createBrowserRouter([
         element: <HomePage />,
       },
       {
+        path: "/assignments",
+        element: <AssignmentPage />,
+      },
+      {
         path: "/course/:id",
         element: <CourseDetail />,
+      },
+      {
+        path: "/assignment/:id",
+        element: <AssignmentDetail />,
+      },
+      {
+        path: "/my-submissions",
+        element: <SubmissionsPage />,
+      },
+      {
+        path: "/profile",
+        element: <ProfilePage />,
+      },
+      {
+        path: "/teachers",
+        element: <TeachersPage />,
       },
     ],
   },
