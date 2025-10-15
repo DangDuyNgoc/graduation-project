@@ -16,10 +16,9 @@ const PlagiarismReportSchema = new mongoose.Schema({
                 enum: ["internal", "external"]
             },
             sourceId: {
-                type: mongoose.Schema.Types.ObjectId,
-                refPath: "matchedSources.sourceType",
+                type: String
             },
-            url: {
+            chunkText: {
                 type: String
             },
             matchedText: {

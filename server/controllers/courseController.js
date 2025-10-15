@@ -378,7 +378,7 @@ export const deleteCourseMaterialsController = async (req, res) => {
         }
 
         // delete materials from S3
-        await deleteObjects(s3_key_map);
+        await deleteObjects(s3_key_map.flat(Infinity).filter(Boolean));
 
         // remove materials from course
         course.materials = [];

@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 import urllib.parse
 from keybert import KeyBERT
 import trafilatura
+from trafilatura import fetch_url, extract
 import re
 from difflib import SequenceMatcher
 import time
@@ -833,24 +834,29 @@ def ddg_search_urls(query, num_results=5):
 
 
 # take snippet from website
-def fetch_web_snippet(url, max_chars=500):
+def fetch_web_snippet(url, max_words=1500, chunk_size=500, chunk_overlap=50):
     try:
-        # Fetch by requests with headers
         headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=10)
+
+        # Send GET request, verify SSL certificates by default
+        resp = requests.get(url, headers=headers, timeout=(3, 7))
         if resp.status_code != 200:
-            return ""
+            return []
 
-        downloaded = resp.text  # pass redirectly HTML for trafilatura
+        downloaded = resp.text
 
-        # Extract main content
-        text = trafilatura.extract(
-            downloaded, include_comments=False, include_tables=False, favor_recall=True
+        # Extract main textual content from HTML
+        text = (
+            trafilatura.extract(
+                downloaded,
+                include_comments=False,
+                include_tables=False,
+                favor_recall=True,
+            )
+            or ""
         )
-        if not text:
-            text = ""
 
-        # take title + meta description
+        # Extract title and meta description
         soup = BeautifulSoup(downloaded, "html.parser")
         title = soup.title.string.strip() if soup.title and soup.title.string else ""
         meta_desc_tag = soup.find("meta", attrs={"name": "description"})
@@ -860,12 +866,24 @@ def fetch_web_snippet(url, max_chars=500):
             else ""
         )
 
-        snippet = ". ".join(filter(None, [title, meta_desc, text]))
-        return snippet[:max_chars]
+        # Combine title, description, and main text
+        full_text = ". ".join(filter(None, [title, meta_desc, text]))
+
+        # Clean text and limit words
+        clean_text = re.sub(r"\s+", " ", full_text).strip()
+        words = clean_text.split()
+        limited_text = " ".join(words[:max_words])
+
+        # Split into intelligent chunks using recursive_chunk
+        chunks = recursive_chunk(
+            limited_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+        )
+
+        return chunks
 
     except Exception as e:
         print(f"[ERROR] Cannot fetch snippet from {url}: {e}")
-        return ""
+        return []
 
 
 # Normalize text before compare
@@ -881,12 +899,23 @@ def substring_similarity(text1, text2):
     return SequenceMatcher(None, normalize_text(text1), normalize_text(text2)).ratio()
 
 
-# Semantic similarity
-def semantic_similarity(text1, text2):
-    emb1 = model.encode([text1], convert_to_numpy=True)
-    emb2 = model.encode([text2], convert_to_numpy=True)
-    sim = np.dot(emb1, emb2.T)[0][0]
-    return sim
+def semantic_similarity_batch(chunk_text, snippets, model):
+    if not snippets:
+        return []
+
+    emb_snippets = model.encode(
+        snippets, convert_to_numpy=True, show_progress_bar=False
+    )
+    emb_chunk = model.encode(
+        [chunk_text], convert_to_numpy=True, show_progress_bar=False
+    )[0]
+
+    # normalize vectors
+    emb_chunk /= np.linalg.norm(emb_chunk)
+    emb_snippets /= np.linalg.norm(emb_snippets, axis=1, keepdims=True)
+
+    sims = np.dot(emb_snippets, emb_chunk)
+    return sims.tolist()
 
 
 # quote 20-30 key words by KeyBERT
@@ -902,68 +931,92 @@ def extract_keywords(text, top_n=25):
 
 # check material chunks online and database and return result
 def check_plagiarism_material(
-    material_id, num_results=5, exact_threshold=0.7, semantic_threshold=0.7, top_k=5
+    material_id, num_results=5, exact_threshold=0.85, semantic_threshold=0.85, top_k=5
 ):
     results = {"online": [], "database": []}
+    total_sim = 0.0
+    total_chunks = 0
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # take all chunks in DB
+    # Load all chunks for this material
     cursor.execute(
         "SELECT faissId, text, embedding FROM chunks WHERE materialId = ?",
         (material_id,),
     )
     chunks = cursor.fetchall()
-    print(f"Found {len(chunks)} chunks for material_id={material_id}")
+    print(f"[INFO] Found {len(chunks)} chunks for material_id={material_id}")
 
-    faiss_indexes = [
-        ("course", faiss_course_index),
-        ("submission", faiss_submission_index),
-    ]
+    # keep course index (remove submission)
+    faiss_indexes = [("course", faiss_course_index)]
 
     for idx, (faiss_id, chunk_text, embedding_json) in enumerate(chunks, 1):
-        #   onl
+        total_chunks += 1
+        print(f"\n[SCAN] Chunk {idx}/{len(chunks)}")
+
+        # ONLINE SCANNING
         try:
             keywords = extract_keywords(chunk_text, top_n=20)
-            query = " ".join(keywords)
-            urls = ddg_search_urls(query, num_results=num_results)
+            query = " ".join(keywords) if keywords else chunk_text[:200]
 
+            urls = ddg_search_urls(query, num_results=num_results)
+            urls = list(dict.fromkeys(urls))  # remove duplicates
+            if not urls:
+                continue
+
+            seen_snippets = set()
             for url in urls:
-                snippet = fetch_web_snippet(url, max_chars=500)
-                if not snippet:
+                snippets = fetch_web_snippet(url, max_words=1500, chunk_size=500)
+                if not snippets:
                     continue
 
-                exact_sim = substring_similarity(chunk_text, snippet)
-                sem_sim = semantic_similarity(chunk_text, snippet)
+                # remove duplicate snippet text
+                snippets = [s for s in snippets if s not in seen_snippets]
+                seen_snippets.update(snippets)
 
-                match_type = None
-                if exact_sim >= exact_threshold:
-                    match_type = "EXACT COPY"
-                elif sem_sim >= semantic_threshold:
-                    match_type = "SEMANTIC MATCH"
+                sem_sims = semantic_similarity_batch(chunk_text, snippets, model)
 
-                if match_type:
-                    results["online"].append(
-                        {
-                            "chunkIndex": idx,
-                            "chunkText": chunk_text[:120]
-                            + ("..." if len(chunk_text) > 120 else ""),
-                            "url": url,
-                            "snippet": snippet[:200]
-                            + ("..." if len(snippet) > 200 else ""),
-                            "exact_sim": exact_sim,
-                            "semantic_sim": sem_sim,
-                            "match_type": match_type,
-                        }
-                    )
-                time.sleep(1)  # void block
+                for snippet, sem_sim in zip(snippets, sem_sims):
+                    exact_sim = substring_similarity(chunk_text, snippet)
+                    match_type = None
+
+                    if exact_sim >= exact_threshold:
+                        match_type = "EXACT COPY"
+                    elif sem_sim >= semantic_threshold:
+                        match_type = "SEMANTIC MATCH"
+
+                    if match_type:
+                        results["online"].append(
+                            {
+                                "chunkIndex": int(idx),
+                                "chunkText": chunk_text,
+                                "url": url,
+                                "snippet": snippet,
+                                "exact_sim": float(exact_sim),
+                                "semantic_sim": float(sem_sim),
+                                "match_type": match_type,
+                            }
+                        )
+                        print(
+                            f"[MATCH-{match_type}] URL={url[:60]}... "
+                            f"(E={exact_sim:.2f}, S={sem_sim:.2f})"
+                        )
+
+            time.sleep(0.5)
+
         except Exception as e:
             print(f"[ERROR online] {e}")
 
-        # off in db
+        # DATABASE SCANNING (FAISS)
         try:
+            if not embedding_json:
+                continue
+
             chunk_embedding = np.array(json.loads(embedding_json), dtype=np.float32)
+            if chunk_embedding.size == 0:
+                continue
+
             faiss.normalize_L2(chunk_embedding.reshape(1, -1))
 
             for index_name, faiss_index in faiss_indexes:
@@ -972,97 +1025,163 @@ def check_plagiarism_material(
                 )
 
                 for distance, neighbor_id in zip(D[0], I[0]):
-                    if neighbor_id == faiss_id:
+                    if neighbor_id == faiss_id or neighbor_id < 0:
                         continue
 
                     cursor.execute(
-                        "SELECT text, materialId FROM chunks WHERE faissId = ?",
+                        "SELECT text, embedding, materialId FROM chunks WHERE faissId = ?",
                         (int(neighbor_id),),
                     )
                     row = cursor.fetchone()
                     if not row:
                         continue
 
-                    n_text, n_material_id = row
+                    n_text, n_embedding_json, n_material_id = row
+                    if n_material_id == material_id:
+                        continue
 
-                    # cosine similarity
-                    similarity = float(
-                        np.dot(chunk_embedding, chunk_embedding)
-                        / (
-                            np.linalg.norm(chunk_embedding)
-                            * np.linalg.norm(chunk_embedding)
-                        )
+                    neighbor_embedding = np.array(
+                        json.loads(n_embedding_json), dtype=np.float32
                     )
+                    denom = np.linalg.norm(chunk_embedding) * np.linalg.norm(
+                        neighbor_embedding
+                    )
+                    similarity = (
+                        float(np.dot(chunk_embedding, neighbor_embedding) / denom)
+                        if denom != 0
+                        else 0.0
+                    )
+
+                    total_sim += similarity  # sum avg
 
                     results["database"].append(
                         {
-                            "chunkIndex": idx,
-                            "chunkText": chunk_text[:120]
-                            + ("..." if len(chunk_text) > 120 else ""),
-                            "neighborText": n_text[:120]
-                            + ("..." if len(n_text) > 120 else ""),
-                            "neighborMaterialId": n_material_id,
-                            "similarity": similarity,
-                            "chunkFaissId": faiss_id,
-                            "neighborFaissId": neighbor_id,
-                            "indexSource": index_name,  # identify course or submission
+                            "chunkIndex": int(idx),
+                            "chunkText": chunk_text,
+                            "neighborText": n_text,
+                            "neighborMaterialId": (
+                                int(n_material_id)
+                                if n_material_id is not None
+                                else None
+                            ),
+                            "similarity": float(similarity),
+                            "chunkFaissId": int(faiss_id),
+                            "neighborFaissId": int(neighbor_id),
+                            "indexSource": index_name,
                         }
                     )
+
         except Exception as e:
             print(f"[ERROR db] {e}")
 
     conn.close()
+    results["database"].sort(key=lambda x: x.get("similarity", 0.0), reverse=True)
 
-    # sort database matches for similarity decrease
-    results["database"].sort(key=lambda x: x["similarity"], reverse=True)
+    # caculate avg all chunks
+    similarityScore = round(total_sim / total_chunks, 4) if total_chunks > 0 else 0.0
+    results["similarityScore"] = similarityScore
+
+    print(f"\n✅ Done scanning material_id={material_id}")
+    print(f"  → Online matches: {len(results['online'])}")
+    print(f"  → Database matches: {len(results['database'])}")
+    print(f"  → Avg similarityScore: {similarityScore}")
 
     return results
 
 
-def highlight_matches(text, matches):
-    highlighted = text
-
-    for m in matches:
-        snippet = m["snippet"]
-        url = m["url"]
-
-        if snippet.lower() in text.lower():
-            highlighted = highlighted.replace(
-                snippet, f'<span class="highlight">{snippet}</span>'
-            )
-
-        highlighted += (
-            f'<div class="source">'
-            f'Nguồn: <a href="{url}" target="_blank">{url}</a>'
-            f"</div>"
-        )
-
-    return highlighted
-
-
-# hightlight result and return to service nodejs
-@app.route("/check_plagiarism/<material_id>", methods=["GET"])
+@app.route("/check_plagiarism/<int:material_id>", methods=["GET"])
 def check_plagiarism(material_id):
-    results = check_plagiarism_material(material_id)
+    try:
+        # scan
+        results = check_plagiarism_material(material_id)
 
-    for match in results["online"]:
-        match["highlightedHtml"] = highlight_matches(
-            match["chunkText"],
-            [{"snippet": match["snippet"], "url": match["url"]}],
-        )
+        # Load all chunk
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT text FROM chunks WHERE materialId = ?", (material_id,))
+        all_chunks = [row[0] for row in cursor.fetchall()]
+        conn.close()
 
-    for match in results["database"]:
-        match["highlightedHtml"] = highlight_matches(
-            match["chunkText"],
-            [
-                {
-                    "snippet": match["neighborText"],
-                    "url": f"DB:Material-{match['neighborMaterialId']}",
+        print(f"[INFO] Material {material_id} có {len(all_chunks)} chunks")
+
+        # Best ONLINE match
+        best_online = {}
+        for match in results["online"]:
+            chunk = match.get("chunkText")
+            sim = match.get("semantic_sim", match.get("exact_sim", 0.0))
+            if chunk not in best_online or sim > best_online[chunk]["similarity"]:
+                best_online[chunk] = {
+                    "chunkText": chunk,
+                    "matchedText": match.get("snippet"),
+                    "similarity": sim,
+                    "sourceType": "external",
+                    "sourceId": match.get("url"),
                 }
-            ],
+
+        # Best DATABASE match
+        best_database = {}
+        for match in results["database"]:
+            chunk = match.get("chunkText")
+            sim = match.get("similarity", 0.0)
+            if chunk not in best_database or sim > best_database[chunk]["similarity"]:
+                best_database[chunk] = {
+                    "chunkText": chunk,
+                    "matchedText": match.get("neighborText"),
+                    "similarity": sim,
+                    "sourceType": "internal",
+                    "sourceId": str(match.get("neighborMaterialId")),
+                }
+
+        # gross results
+        matched_sources = []
+        matched_count = 0
+
+        for chunk in all_chunks:
+            onl = best_online.get(chunk)
+            db = best_database.get(chunk)
+
+            if onl and db:
+                best = onl if onl["similarity"] >= db["similarity"] else db
+            elif onl:
+                best = onl
+            elif db:
+                best = db
+            else:
+                best = {
+                    "chunkText": chunk,
+                    "matchedText": None,
+                    "similarity": 0.0,
+                    "sourceType": None,
+                    "sourceId": None,
+                }
+
+            if best["similarity"] > 0:
+                matched_count += 1
+
+            matched_sources.append(best)
+
+        # similarityScore
+        similarity_score = (
+            float(np.mean([m["similarity"] for m in matched_sources]))
+            if matched_sources
+            else 0.0
         )
 
-    return jsonify(results)
+        report_details = f"Matched {matched_count}/{len(all_chunks)} chunks"
+
+        response = {
+            "success": True,
+            "materialId": material_id,
+            "similarityScore": round(similarity_score, 4),
+            "matchedSources": matched_sources,
+            "reportDetails": report_details,
+        }
+
+        return jsonify(response)
+
+    except Exception as e:
+        print(f"[ERROR /check_plagiarism] {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 if __name__ == "__main__":
