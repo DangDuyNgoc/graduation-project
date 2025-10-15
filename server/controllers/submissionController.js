@@ -33,11 +33,12 @@ export const uploadSubmissionController = async (req, res) => {
         message: "Assignment not found",
       });
     }
-
+    
     // check late submission
     const now = new Date();
     let isLate = false;
     let lateDuration = 0;
+    let status = "Submitted";
 
     if (assignment.dueDate && now > assignment.dueDate) {
       if (!assignment.allowLateSubmission) {
@@ -49,8 +50,9 @@ export const uploadSubmissionController = async (req, res) => {
       }
 
       isLate = true;
-      lateDuration = now.getTime() - assignment.dueDate.getTime();
-    }
+      status = "Late Submitted";
+      lateDuration = now.getTime() - assignments.dueDate.getTime();
+    };
 
     const materialDocs = [];
     const combinedHash = crypto.createHash("sha256");
@@ -81,7 +83,6 @@ export const uploadSubmissionController = async (req, res) => {
           materialDocs.push(response.data._id);
         } else if (response.data?.id) {
           materialDocs.push(response.data.id);
-          r;
         }
       } catch (error) {
         console.error(
@@ -104,12 +105,13 @@ export const uploadSubmissionController = async (req, res) => {
 
     // create submission
     const submission = new submissionModel({
-      student: req.user._id,
-      assignment: id,
-      materials: materialDocs,
-      contentHash,
-      isLate,
-      lateDuration,
+            student: req.user._id,
+            assignment: id,
+            materials: materialDocs.map(m => m._id),
+            contentHash,
+            isLate,
+            status,
+            lateDuration
     });
 
     await submission.save();
@@ -193,6 +195,7 @@ export const updateSubmissionController = async (req, res) => {
     // check late submission
     const now = new Date();
     let isLate = false;
+    let status = "Submitted";
     let lateDuration = 0;
 
     if (assignments.dueDate && now > assignments.dueDate) {
@@ -204,6 +207,7 @@ export const updateSubmissionController = async (req, res) => {
         };
 
         isLate = true;
+        status = "Late Submitted";
         lateDuration = now.getTime() - assignments.dueDate.getTime();
     };
 
@@ -280,6 +284,7 @@ export const updateSubmissionController = async (req, res) => {
     // update submission
     submission.isLate = isLate;
     submission.lateDuration = lateDuration;
+    submission.status = status;
     submission.contentHash = combinedHash.digest("hex");
     if (!keepOld) submission.materials = [];
     submission.materials = [...submission.materials, ...newMaterialIds];
@@ -462,7 +467,7 @@ export const getSubmissionController = async (req, res) => {
 // get all Submissions by student id
 export const getStudentSubmissionsController = async (req, res) => {
     try {
-        const { id } = req.params; // studentId
+        const id = req.user._id; // studentId
         if (!id) {
             return res.status(400).send({
                 success: false,
@@ -481,6 +486,7 @@ export const getStudentSubmissionsController = async (req, res) => {
         const submission = await submissionModel.find({ student: id })
             .populate("assignment")
             .populate("student");
+      
         if (!submission || submission.length === 0) {
             return res.status(404).send({
                 success: false,

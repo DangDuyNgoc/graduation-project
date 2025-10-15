@@ -33,6 +33,20 @@ export const createAssignmentController = async (req, res) => {
             })
         };
 
+        // validate late submission duration
+        let validLateDuration = 0;
+        if (allowLateSubmission) {
+            const durationInMinutes = parseInt(lateSubmissionDuration) || 60;
+
+            if (durationInMinutes > 1440) {
+                return res.status(400).send({
+                    success: false,
+                    message: "Late submission duration cannot exceed 24 hours",
+                })
+            }
+            validLateDuration = durationInMinutes;
+        }
+
         // upload assignment file to s3
         let materials = [];
         if (req.files && req.files.length > 0) {
@@ -57,8 +71,8 @@ export const createAssignmentController = async (req, res) => {
             title,
             description,
             dueDate,
-            allowLateSubmission: allowLateSubmission || false,
-            lateSubmissionDuration: allowLateSubmission ? (lateSubmissionDuration || 24) : 0,
+            allowLateSubmission: !!allowLateSubmission,
+            lateSubmissionDuration: validLateDuration,
             materials
         });
 
@@ -118,6 +132,7 @@ export const getAssignmentByCourseController = async (req, res) => {
 export const getAssignmentController = async (req, res) => {
     try {
         const { id } = req.params; // assignment id
+        const userId = req.user._id;
 
         if (!id) {
             return res.status(400).send({
@@ -126,7 +141,17 @@ export const getAssignmentController = async (req, res) => {
             })
         };
 
-        const assignment = await assignmentModel.findById(id);
+        const assignment = await assignmentModel
+            .findById(id)
+            .populate("materials", "title s3_url fileType uploadedAt");
+
+        const submission = await submissionModel
+            .findOne({
+                assignment: id,
+                student: userId,
+            })
+            .populate("materials", "title s3_url fileType uploadedAt")
+            .lean(); // read only
 
         if (!assignment) {
             return res.status(404).send({
@@ -138,7 +163,8 @@ export const getAssignmentController = async (req, res) => {
         res.status(200).send({
             success: true,
             message: "Assignment fetched Successfully",
-            assignment
+            assignment,
+            submission: submission || null,
         })
     } catch (error) {
         console.log("Error in get assignment by id: ", error);
@@ -149,11 +175,12 @@ export const getAssignmentController = async (req, res) => {
     }
 };
 
-// get all assignment
+// get all assignments
 export const getAllAssignmentController = async (req, res) => {
     try {
         const assignments = await assignmentModel.find()
-            .populate("createdBy")
+            .populate("createdBy", "name email")
+            .populate("courseId", "name")
             .sort({ createdAt: -1 });
 
         res.status(200).send({
@@ -169,6 +196,87 @@ export const getAllAssignmentController = async (req, res) => {
         })
     }
 };
+
+// get all assignments for student
+export const getAllAssignmentFotStudentController = async (req, res) => {
+    try {
+        const studentId = req.user._id;
+
+        // get all courses which student's enrolling in
+        const courses = await courseModel.find({ studentIds: studentId }, "_id name")
+
+        // if student's not enrolled in any courses
+        if (courses.length === 0) {
+            return res.status(404).send({
+                success: false,
+                message: "You're not enrolled in any courses",
+                assignments: [],
+            })
+        };
+
+        // get all assignments in that courses
+        const courseIds = courses.map((c) => c._id);
+        const assignments = await assignmentModel
+            .find({ courseId: { $in: courseIds } })
+            .populate("createdBy", "name")
+            .populate("courseId", "name")
+
+        // get all submissions of student
+        const submissions = await submissionModel.find({
+            student: studentId,
+            assignment: { $in: assignments.map(a => a._id) }
+        });
+
+        // combine assignment + submission 
+        const result = assignments.map(a => {
+            const submission = submissions.find(
+                s => s.assignment.toString() === a._id.toString()
+            );
+
+            let status = "Not Submit";
+            let isLate = false;
+            let lateDuration = 0;
+
+            if (submission) {
+                if (submission.isLate) {
+                    status = "Late Submitted";
+                    isLate = true;
+                    lateDuration = submission.lateDuration || 0;
+                } else {
+                    status = submission.status || "Submitted";
+                }
+            };
+
+            return {
+                assignmentId: a._id,
+                title: a.title,
+                description: a.description,
+                dueDate: a.dueDate,
+                allowLateSubmission: a.allowLateSubmission,
+                lateSubmissionDuration: a.lateSubmissionDuration,
+                courseName: a.courseId?.name,
+                teacherName: a.createdBy?.name,
+                status,
+                isLate,
+                lateDuration,
+                submittedAt: submission?.submittedAt || null
+            }
+        });
+
+        res.status(200).send({
+            success: true,
+            message: "Fetched Assignments For Student Successfully",
+            total: result.length,
+            assignments: result
+        })
+    } catch (error) {
+        console.log("Error in get all assignments for student: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        })
+    }
+}
 
 // update assignment
 export const updateAssignmentController = async (req, res) => {
@@ -201,10 +309,21 @@ export const updateAssignmentController = async (req, res) => {
         if (title) updateData.title = title;
         if (description) updateData.description = description;
         if (dueDate) updateData.dueDate = dueDate;
+
         if (allowLateSubmission !== undefined) {
-            updateData.allowLateSubmission = allowLateSubmission;
-            if (allowLateSubmission) {
-                updateData.lateSubmissionDuration = lateSubmissionDuration || 24;
+            updateData.allowLateSubmission = !!allowLateSubmission;
+
+            if (updateData.allowLateSubmission) {
+                const durationInMinutes = parseInt(lateSubmissionDuration) || 60;
+
+                if (durationInMinutes > 1440) {
+                    return res.status(400).send({
+                        success: false,
+                        message: "Late submission duration cannot exceed 24 hours (1440 minutes)",
+                    });
+                }
+
+                updateData.lateSubmissionDuration = durationInMinutes;
             } else {
                 updateData.lateSubmissionDuration = 0;
             }

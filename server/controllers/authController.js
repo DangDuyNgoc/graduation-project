@@ -188,7 +188,7 @@ export const uploadAvatarController = async (req, res) => {
         }
 
         // upload new avatar
-        const uploadImage = await uploadImageCloudinary(req.file);
+        const uploadImage = await uploadImageCloudinary(req.file, "binkey/avatar");
         if (!uploadImage || !uploadImage.public_id || !uploadImage.secure_url) {
             return res.status(500).send({
                 success: false,
@@ -268,6 +268,34 @@ export const updateUserController = async (req, res) => {
         });
     }
 };
+
+// get all information of teacher
+export const getAllInfoTeacherController = async (req, res) => {
+    try {
+        const teacher = await userModel.find({ role: "TEACHER" })
+            .select("-password")
+            .sort({ createdAt: -1 });
+
+        if (!teacher || teacher.length === 0) {
+            return res.status(404).send({
+                success: false,
+                message: "No teachers found"
+            });
+        }
+
+        res.status(200).send({
+            success: true,
+            message: "Fetcher All Teachers Successfully!",
+            teacher,
+        })
+    } catch (error) {
+        console.error("Get all teachers error:", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+}
 
 // request reset password
 export const requestResetPasswordController = async (req, res) => {

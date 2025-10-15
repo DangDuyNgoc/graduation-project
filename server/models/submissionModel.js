@@ -36,6 +36,11 @@ const submissionSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    status: {
+        type: String,
+        enum: ["Not Submit", "Submitted", "Late Submitted"],
+        default: "Not Submit"
+    },
     submittedAt: {
         type: Date,
         default: Date.now

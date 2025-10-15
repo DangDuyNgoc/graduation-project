@@ -8,6 +8,14 @@ const courseSchema = new mongoose.Schema({
     description: {
         type: String,
     },
+    thumbnail: {
+        public_id: {
+            type: String,
+        },
+        url: {
+            type: String,
+        }
+    },
     teacherId: {
         type: mongoose.Types.ObjectId,
         ref: "user",

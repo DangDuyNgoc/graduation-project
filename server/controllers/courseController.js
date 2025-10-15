@@ -1,12 +1,16 @@
 import axios from "axios";
+import cloudinary from "cloudinary";
 import courseModel from "../models/courseModel.js";
 import userModel from "../models/userModel.js";
 import { deleteObjects, deleteOneObject } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
 import assignmentModel from "../models/assignmentModel.js";
 import submissionModel from "../models/submissionModel.js";
+import uploadImageCloudinary from "../utils/uploadImage.js";
 
 export const createCourseController = async (req, res) => {
+    req.file = req.files?.thumbnail?.[0];
+    req.files = req.files?.materials || [];
     try {
         const { name, description } = req.body;
 
@@ -17,9 +21,21 @@ export const createCourseController = async (req, res) => {
             })
         };
 
+        const uploadThumbnail = await uploadImageCloudinary(req.file, "binkey/courses");
+        if (!uploadThumbnail || !uploadThumbnail.public_id || !uploadThumbnail.secure_url) {
+            return res.status(500).send({
+                success: false,
+                message: "Thumbnail upload failed"
+            });
+        }
+
         let course = new courseModel({
             name,
             description,
+            thumbnail: {
+                public_id: uploadThumbnail.public_id,
+                url: uploadThumbnail.secure_url
+            },
             teacherId: req.user._id,
         });
 
@@ -211,16 +227,11 @@ export const getAllCourseController = async (req, res) => {
 };
 
 export const updateCourseController = async (req, res) => {
+    req.file = req.files?.thumbnail?.[0];
+    req.files = req.files?.materials || [];
     try {
         const { name, description } = req.body;
         const { id } = req.params;
-
-        if (!name && !description) {
-            return res.status(400).send({
-                success: false,
-                message: "Please provide at least one field to update"
-            })
-        };
 
         if (!id) {
             return res.status(400).send({
@@ -234,16 +245,47 @@ export const updateCourseController = async (req, res) => {
         if (name) updateData.name = name;
         if (description) updateData.description = description;
 
-        let course = await courseModel.findByIdAndUpdate(
-            id,
-            updateData,
-            { new: true });
+        let course = await courseModel.findById(id);
         if (!course) {
             return res.status(404).send({
                 success: false,
                 message: "Course not found",
             })
         };
+
+        // update thumbnail if it has
+        if (req.file) {
+            //  delete old thumbnail if exists
+            if (course.thumbnail?.public_id) {
+                try {
+                    await cloudinary.uploader.destroy(course.thumbnail.public_id);
+                } catch (error) {
+                    console.log("Error deleting old thumbnail: ", error)
+                }
+            }
+
+            // upload new thumbnail
+            const uploadResult = await uploadImageCloudinary(req.file, "binkey/courses");
+            if (!uploadResult?.public_id || !uploadResult?.secure_url) {
+                return res.status(500).send({
+                    success: false,
+                    message: "Thumbnail upload failed",
+                });
+            };
+
+            // attached the new thumbnail
+            updateData.thumbnail = {
+                public_id: uploadResult.public_id,
+                secure_url: uploadResult.secure_url
+            };
+        };
+
+        // update name, description or thumbnail
+        course = await courseModel.findByIdAndUpdate(
+            id,
+            updateData,
+            { new: true }
+        );
 
         // upload new materials if provided
         if (req.files && req.files.length > 0) {

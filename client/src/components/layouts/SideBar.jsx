@@ -1,7 +1,7 @@
 // src/components/layout/Sidebar.jsx
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { Home, FileText, Upload, User } from "lucide-react";
+import { Home, FileText, Upload, User, Users } from "lucide-react";
 
 const Sidebar = () => {
   const menuItems = [
@@ -16,9 +16,14 @@ const Sidebar = () => {
       icon: <FileText className="size-4" />,
     },
     {
-      name: "Submit Work",
-      path: "/submit",
+      name: "My Submissions",
+      path: "/my-submissions",
       icon: <Upload className="size-4" />,
+    },
+    {
+      name: "Contact Teachers",
+      path: "/teachers",
+      icon: <Users className="size-4" />,
     },
     { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
   ];
