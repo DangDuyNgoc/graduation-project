@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hook/useAuth";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
 import { LoaderCircle } from "lucide-react";
@@ -10,6 +11,8 @@ const AssignmentPage = () => {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sortBy, setSortBy] = useState("dueDate");
+
+  useAuth();
 
   const navigate = useNavigate();
 
@@ -57,7 +60,7 @@ const AssignmentPage = () => {
         return new Date(a.dueDate) - new Date(b.dueDate);
       }
       if (sortBy === "status") {
-        const order = { "Not Submit": 1, "Late Submitted": 2, "Submitted": 3 };
+        const order = { "Not Submit": 1, "Late Submitted": 2, Submitted: 3 };
         return order[a.status] - order[b.status];
       }
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { Eye, LoaderCircle } from "lucide-react";
 import { EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { validateEmail } from "@/utils/helper";
 import api from "@/utils/axiosInstance";
+import { UserContext } from "@/context/UserContext";
 
 const Signup = () => {
   const [fullName, setFullName] = useState("");
@@ -31,6 +32,7 @@ const Signup = () => {
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
+  const { updateUser } = useContext(UserContext);
 
   const togglePassword = () => {
     setShowPassword(!showPassword);
@@ -89,15 +91,16 @@ const Signup = () => {
           email,
           phone,
           password,
-          role
+          role,
         },
         { withCredentials: true }
       );
 
       const token = data.accessToken;
-      // const userInfo = data.user;
+      const userInfo = data.user;
 
       if (token) {
+        updateUser(userInfo);
         navigate("/dashboard");
       }
     } catch (error) {

@@ -27,14 +27,14 @@ export const isAuthenticated = async (req, res, next) => {
     } catch (error) {
         console.error("Authentication error:", error);
         if (error.name === "TokenExpiredError") {
-            return res.status(403).send({
+            return res.status(401).send({
                 success: false,
                 message: "Access token expired",
             });
         }
 
         if (error.name === "JsonWebTokenError") {
-            return res.status(403).json({
+            return res.status(401).json({
                 success: false,
                 message: "Invalid access token",
             });
