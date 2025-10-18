@@ -51,7 +51,7 @@ export const uploadSubmissionController = async (req, res) => {
 
       isLate = true;
       status = "Late Submitted";
-      lateDuration = now.getTime() - assignments.dueDate.getTime();
+      lateDuration = now.getTime() - assignment.dueDate.getTime();
     };
 
     const materialDocs = [];
@@ -107,7 +107,7 @@ export const uploadSubmissionController = async (req, res) => {
     const submission = new submissionModel({
             student: req.user._id,
             assignment: id,
-            materials: materialDocs.map(m => m._id),
+            materials: materialDocs.map(m => m),
             contentHash,
             isLate,
             status,
