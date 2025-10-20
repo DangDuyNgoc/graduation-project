@@ -1,0 +1,4 @@
+cd blockchain:
+start hardhat: npx hardhat node
+open other terminal: npx hardhat run scripts/deploy.js --network localhost
+copy contract deployed and past into .env file belong in server folder

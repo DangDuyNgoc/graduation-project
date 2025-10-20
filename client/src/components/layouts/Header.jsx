@@ -1,4 +1,3 @@
-// src/components/layout/Header.jsx
 import React, { useContext } from "react";
 import { GraduationCap } from "lucide-react";
 import { useNavigate } from "react-router-dom";

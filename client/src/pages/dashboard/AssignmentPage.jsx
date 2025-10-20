@@ -29,7 +29,8 @@ const AssignmentPage = () => {
     } catch (error) {
       console.log(error);
       toast.error(
-        error?.response?.data?.message || "Failed to fetch assignments"
+        error?.response?.data?.message || "Failed to fetch assignments",
+        { id: "enroll_error" }
       );
     } finally {
       setLoading(false);

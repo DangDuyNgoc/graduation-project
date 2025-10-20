@@ -27,8 +27,27 @@ const AssignmentDetail = () => {
       if (data.success) {
         setAssignment(data.assignment);
         setSubmission(data.submission);
+        if (data.submission._id) {
+          console.log(data.submission._id);
+          try {
+            const subRes = await api.get(
+              `/submission/get-submission/${data.submission._id}`,
+              {
+                withCredentials: true,
+              }
+            );
+            if (subRes.data.success) {
+              setSubmission(subRes.data.result);
+              console.log("subRes: ", subRes.data);
+            }
+          } catch (error) {
+            console.log("Error fetching detailed submission:", error);
+          }
+        }
       } else {
-        toast.error(data.message || "Failed to load assignment");
+        toast.error(data.message || "Failed to load assignment", {
+          id: "enroll_error",
+        });
       }
     } catch (error) {
       console.log(error);
@@ -290,7 +309,9 @@ const AssignmentDetail = () => {
                       <div className="flex items-center space-x-3">
                         <FileText className="text-blue-500" size={18} />
                         <span className="text-gray-800 text-sm truncate max-w-[250px]">
-                          {mat.title || mat.s3_url.split("/").pop()}
+                          {mat.title ||
+                            mat.s3_url?.split("/").pop() ||
+                            "Unnamed File"}
                         </span>
                       </div>
                       <a

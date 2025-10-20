@@ -1,5 +1,7 @@
 import axios from "axios";
 import PlagiarismReportModel from "../models/PlagiarismReport.js";
+import materialsModel from "../models/materialModel.js";
+import submissionModel from "../models/submissionModel.js";
 
 export const checkPlagiarismController = async (req, res) => {
   try {
@@ -12,6 +14,22 @@ export const checkPlagiarismController = async (req, res) => {
         message: "Missing submissionId or materialId",
       });
     }
+
+    const material = await materialsModel.findById(materialId);
+    if (!material) {
+      return res.status(404).send({
+        success: false,
+        message: "Material Not found"
+      });
+    };
+
+    const submission = await submissionModel.findById(submissionId);
+    if (!submission) {
+      return res.status(404).send({
+        success: false,
+        message: "Submission Not found"
+      });
+    };
 
     // Call Flask plagiarism checking API
     const flaskResponse = await axios.get(

@@ -56,7 +56,7 @@ const ProfilePage = () => {
       });
 
       if (data.success) {
-        toast.success("Avatar updated successfully!");
+        toast.success("Avatar updated successfully!", { id: "enroll_error" });
         updateUser(data.user);
         setImage(null);
       }

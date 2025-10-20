@@ -1077,14 +1077,14 @@ def check_plagiarism_material(
     conn.close()
     results["database"].sort(key=lambda x: x.get("similarity", 0.0), reverse=True)
 
-    # caculate avg all chunks
+    # calculate avg all chunks
     similarityScore = round(total_sim / total_chunks, 4) if total_chunks > 0 else 0.0
     results["similarityScore"] = similarityScore
 
-    print(f"\n✅ Done scanning material_id={material_id}")
-    print(f"  → Online matches: {len(results['online'])}")
-    print(f"  → Database matches: {len(results['database'])}")
-    print(f"  → Avg similarityScore: {similarityScore}")
+    print(f"\n Done scanning material_id={material_id}")
+    print(f" Online matches: {len(results['online'])}")
+    print(f" Database matches: {len(results['database'])}")
+    print(f" Avg similarityScore: {similarityScore}")
 
     return results
 
