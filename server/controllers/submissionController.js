@@ -54,7 +54,7 @@ export const uploadSubmissionController = async (req, res) => {
       return res.status(403).send({
         success: false,
         message: "You are not enrolled in this course. Cannot submit assignment.",
-      });c
+      }); c
     }
 
     // check late submission
@@ -72,9 +72,20 @@ export const uploadSubmissionController = async (req, res) => {
         });
       }
 
+      lateDuration = now.getTime() - new Date(assignment.dueDate).getTime();
+
+      // limit late maximum duration
+      const maxLateDurationMs = assignment.lateSubmissionDuration * 60 * 1000;
+
+      // if late duration exceed max allowed late duration, block submission
+      if (lateDuration > maxLateDurationMs) {
+        return res.status(400).send({
+          success: false,
+          message: `You exceeded the allowed late submission duration of ${assignment.lateSubmissionDuration} minutes.`,
+        })
+      }
       isLate = true;
       status = "Late Submitted";
-      lateDuration = now.getTime() - assignments.dueDate.getTime();
     };
 
     const materialDocs = [];

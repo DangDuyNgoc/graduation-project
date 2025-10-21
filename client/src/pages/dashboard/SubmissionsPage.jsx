@@ -1,5 +1,6 @@
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
+import { formatLateDuration } from "@/utils/timeFormatter";
 import { FileText, LoaderCircle, Paperclip } from "lucide-react";
 import React, { useState, useEffect, useMemo } from "react";
 
@@ -15,7 +16,23 @@ const SubmissionsPage = () => {
         withCredentials: true,
       });
       if (data.success) {
-        const filtered = data.submission.filter((s) =>
+        const { materials = [], ...submissionsData } = data.result;
+
+        const submissionsArray = Object.values(submissionsData).filter(
+          (item) => item && item._id
+        );
+
+        const mergedMaterials = submissionsArray.map((submission) => {
+          const matchedMaterials = materials.filter(
+            (m) => m.submissionId === submission._id
+          );
+          return {
+            ...submission,
+            materials: matchedMaterials,
+          };
+        });
+
+        const filtered = mergedMaterials.filter((s) =>
           ["Submitted", "Late Submitted"].includes(s.status)
         );
         setSubmissions(filtered);
@@ -154,7 +171,7 @@ const SubmissionsPage = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {submission.status === "Late Submitted"
-                        ? `${submission.lateDuration}h`
+                        ? formatLateDuration(submission.lateDuration)
                         : "—"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

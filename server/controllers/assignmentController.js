@@ -223,6 +223,8 @@ export const getAllAssignmentForStudentController = async (req, res) => {
             assignment: { $in: assignments.map(a => a._id) }
         });
 
+        const now = new Date();
+
         // combine assignment + submission 
         const result = assignments.map(a => {
             const submission = submissions.find(
@@ -243,6 +245,22 @@ export const getAllAssignmentForStudentController = async (req, res) => {
                 }
             };
 
+            const dueDate = new Date(a.dueDate);
+            let isOverdue = false;
+            let finalDeadline = dueDate;
+
+            if (a.allowLateSubmission && a.lateSubmissionDuration) {
+                finalDeadline = new Date(
+                    dueDate.getTime() + a.lateSubmissionDuration * 60000
+                )
+            };
+
+            if (now > finalDeadline) {
+                isOverdue = true;
+            };
+
+            const timeRemaining = Math.max(0, Math.floor((finalDeadline - now) / 60000));
+
             return {
                 assignmentId: a._id,
                 title: a.title,
@@ -255,7 +273,9 @@ export const getAllAssignmentForStudentController = async (req, res) => {
                 status,
                 isLate,
                 lateDuration,
-                submittedAt: submission?.submittedAt || null
+                submittedAt: submission?.submittedAt || null,
+                isOverdue,
+                timeRemaining
             }
         });
 

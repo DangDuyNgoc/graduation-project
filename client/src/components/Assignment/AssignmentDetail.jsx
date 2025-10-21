@@ -38,7 +38,6 @@ const AssignmentDetail = () => {
             );
             if (subRes.data.success) {
               setSubmission(subRes.data.result);
-              console.log("subRes: ", subRes.data);
             }
           } catch (error) {
             console.log("Error fetching detailed submission:", error);
@@ -119,11 +118,14 @@ const AssignmentDetail = () => {
 
       formData.append("keepOld", keepOld);
 
-      const endpoint = submission
+      const isUpdate = Boolean(submission?._id);
+      const endpoint = isUpdate
         ? `/submission/update-submission/${submission._id}`
         : `/submission/add-submission/${id}`;
 
-      const { data } = await api.post(endpoint, formData, {
+      const method = isUpdate ? "put" : "post";
+
+      const { data } = await api[method](endpoint, formData, {
         withCredentials: true,
         headers: {
           "Content-Type": "multipart/form-data",
@@ -135,7 +137,7 @@ const AssignmentDetail = () => {
             ? "Submission Updated!"
             : "Submission uploaded successfully!"
         );
-        fetchAssignments();
+        await fetchAssignments();
         setSelectedFile([]);
         navigate("/assignments");
       } else {
@@ -369,7 +371,10 @@ const AssignmentDetail = () => {
                 disabled={isSubmitting || selectedFile.length === 0}
               >
                 {isSubmitting ? (
-                  <LoaderCircle className="size-8 animate-spin text-primary"></LoaderCircle>
+                  <>
+                    <LoaderCircle className="animate-spin mr-2 size-5 text-white" />
+                    <span>Submitting...</span>
+                  </>
                 ) : submission ? (
                   "Update Assignment"
                 ) : (
