@@ -1,27 +1,10 @@
 import axios from "axios";
 import PlagiarismReportModel from "../models/PlagiarismReport.js";
-import materialsModel from "../models/materialModel.js";
 import submissionModel from "../models/submissionModel.js";
 
 export const checkPlagiarismController = async (req, res) => {
   try {
-    const { submissionId } = req.body;
-    const { materialId } = req.params;
-
-    if (!submissionId || !materialId) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing submissionId or materialId",
-      });
-    }
-
-    const material = await materialsModel.findById(materialId);
-    if (!material) {
-      return res.status(404).send({
-        success: false,
-        message: "Material Not found"
-      });
-    };
+    const { submissionId } = req.params;
 
     const submission = await submissionModel.findById(submissionId);
     if (!submission) {
@@ -31,9 +14,21 @@ export const checkPlagiarismController = async (req, res) => {
       });
     };
 
+    if (submissionId) {
+      const flaskCheck = await axios.get(
+        `http://localhost:5000/get_materials_by_submission/${submissionId.toString()}`
+      );
+      if (flaskCheck.data?.materials.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Server can't not find materials of submission",
+        });
+      }
+    }
+
     // Call Flask plagiarism checking API
     const flaskResponse = await axios.get(
-      `http://localhost:5000/check_plagiarism/${parseInt(materialId)}`
+      `http://localhost:5000/check_plagiarism/${submissionId.toString()}`
     );
     const data = flaskResponse.data;
 
@@ -44,6 +39,7 @@ export const checkPlagiarismController = async (req, res) => {
       });
     }
 
+    const materialId = data.materialId;
     // Prepare mapped sources for DB
     const mappedSources = data.matchedSources.map((s) => ({
       sourceType: s.sourceType,
@@ -53,17 +49,17 @@ export const checkPlagiarismController = async (req, res) => {
       similarity: s.similarity,
     }));
 
-    // Check if report already exists ---
+    // Check if report already exists
     let existingReport = await PlagiarismReportModel.findOne({ submissionId });
 
     if (existingReport) {
       // Update existing report
       existingReport.similarityScore = data.similarityScore;
       existingReport.matchedSources = mappedSources;
-      existingReport.reportDetails = JSON.stringify({
+      existingReport.reportDetails = {
         materialId,
         totalSources: mappedSources.length,
-      });
+      };
 
       await existingReport.save();
 
@@ -78,10 +74,10 @@ export const checkPlagiarismController = async (req, res) => {
         submissionId,
         similarityScore: data.similarityScore,
         matchedSources: mappedSources,
-        reportDetails: JSON.stringify({
+        reportDetails: {
           materialId,
           totalSources: mappedSources.length,
-        }),
+        },
       });
 
       return res.status(200).json({

@@ -30,8 +30,8 @@ const PlagiarismReportSchema = new mongoose.Schema({
         }
     ],
     reportDetails: {
-        type: String,
-    }
+        type: mongoose.Schema.Types.Mixed,
+    },
 }, { timestamps: true });
 
 const PlagiarismReportModel = mongoose.model("plagiarismReport", PlagiarismReportSchema);

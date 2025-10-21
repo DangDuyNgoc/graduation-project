@@ -457,12 +457,12 @@ def delete_all_courses():
         # --- Reset FAISS indexes ---
         faiss_course_index.reset()
         faiss_submission_index.reset()
-        print("✅ Reset FAISS course & submission indexes")
+        print("Reset FAISS course & submission indexes")
 
         # --- Ghi lại file sau khi reset (trống hoàn toàn) ---
         faiss.write_index(faiss_course_index, course_index_file)
         faiss.write_index(faiss_submission_index, submission_index_file)
-        print("✅ Saved empty FAISS indexes back to file")
+        print("Saved empty FAISS indexes back to file")
 
         return jsonify(
             {
@@ -839,7 +839,7 @@ def fetch_web_snippet(url, max_words=1500, chunk_size=500, chunk_overlap=50):
         headers = {"User-Agent": "Mozilla/5.0"}
 
         # Send GET request, verify SSL certificates by default
-        resp = requests.get(url, headers=headers, timeout=(3, 7))
+        resp = requests.get(url, headers=headers, timeout=(2, 5))
         if resp.status_code != 200:
             return []
 
@@ -1089,26 +1089,69 @@ def check_plagiarism_material(
     return results
 
 
-@app.route("/check_plagiarism/<int:material_id>", methods=["GET"])
-def check_plagiarism(material_id):
+@app.route("/check_plagiarism/<submission_id>", methods=["GET"])
+def check_plagiarism(submission_id):
     try:
-        # scan
-        results = check_plagiarism_material(material_id)
-
-        # Load all chunk
+        # Load all materials in submission
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT text FROM chunks WHERE materialId = ?", (material_id,))
-        all_chunks = [row[0] for row in cursor.fetchall()]
+        cursor.execute(
+            "SELECT id FROM materials WHERE submissionId = ?", (submission_id,)
+        )
+        material_rows = cursor.fetchall()
+        material_ids = [row[0] for row in material_rows]
         conn.close()
 
-        print(f"[INFO] Material {material_id} có {len(all_chunks)} chunks")
+        if not material_ids:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": f"No materials found for submission_id {submission_id}",
+                    }
+                ),
+                404,
+            )
+
+        print(f"[INFO] Submission {submission_id} has {len(material_ids)} materials")
+
+        # Load all chunks from these materials
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        placeholders = ",".join("?" * len(material_ids))
+        cursor.execute(
+            f"SELECT id, materialId, text FROM chunks WHERE materialId IN ({placeholders})",
+            material_ids,
+        )
+        chunk_rows = cursor.fetchall()
+        conn.close()
+
+        all_chunks = [row[2] for row in chunk_rows]
+        print(f"[INFO] Total {len(all_chunks)} chunks in submission {submission_id}")
+
+        # Run plagiarism scan for each material, combine all 'online' and 'database' results
+        all_online = []
+        all_database = []
+
+        for mid in material_ids:
+            try:
+                print(f"[SCAN] Checking material {mid} ...")
+                res = check_plagiarism_material(mid)
+                all_online.extend(res.get("online", []))
+                all_database.extend(res.get("database", []))
+            except Exception as sub_err:
+                print(f"[WARN] Error scanning material {mid}: {sub_err}")
+                continue
+
+        results = {"online": all_online, "database": all_database}
 
         # Best ONLINE match
         best_online = {}
         for match in results["online"]:
             chunk = match.get("chunkText")
             sim = match.get("semantic_sim", match.get("exact_sim", 0.0))
+            if not chunk:
+                continue
             if chunk not in best_online or sim > best_online[chunk]["similarity"]:
                 best_online[chunk] = {
                     "chunkText": chunk,
@@ -1123,6 +1166,8 @@ def check_plagiarism(material_id):
         for match in results["database"]:
             chunk = match.get("chunkText")
             sim = match.get("similarity", 0.0)
+            if not chunk:
+                continue
             if chunk not in best_database or sim > best_database[chunk]["similarity"]:
                 best_database[chunk] = {
                     "chunkText": chunk,
@@ -1132,7 +1177,7 @@ def check_plagiarism(material_id):
                     "sourceId": str(match.get("neighborMaterialId")),
                 }
 
-        # gross results
+        # Merge best results per chunk
         matched_sources = []
         matched_count = 0
 
@@ -1160,7 +1205,7 @@ def check_plagiarism(material_id):
 
             matched_sources.append(best)
 
-        # similarityScore
+        # Compute overall similarity score
         similarity_score = (
             float(np.mean([m["similarity"] for m in matched_sources]))
             if matched_sources
@@ -1171,7 +1216,8 @@ def check_plagiarism(material_id):
 
         response = {
             "success": True,
-            "materialId": material_id,
+            "materialId": material_ids,
+            "submissionId": submission_id,
             "similarityScore": round(similarity_score, 4),
             "matchedSources": matched_sources,
             "reportDetails": report_details,

@@ -4,8 +4,8 @@ import { isAuthenticated } from "../middlewares/authMiddleware.js";
 
 const plagiarismRouter = express.Router();
 
-plagiarismRouter.post(
-  "/check-plagiarism/:materialId",
+plagiarismRouter.get(
+  "/check-plagiarism/:submissionId",
   isAuthenticated,
   checkPlagiarismController
 );
