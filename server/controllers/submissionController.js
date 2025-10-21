@@ -500,7 +500,9 @@ export const getStudentSubmissionsController = async (req, res) => {
            const flaskRes = await axios.get(
              `http://localhost:5000/get_materials_by_submission/${sub._id.toString()}`
            );
-           materials = flaskRes.data?.materials || [];
+           if (flaskRes.data?.materials?.length) {
+             materials.push(...flaskRes.data?.materials);
+           }
          } catch (error) {
            console.error(
              "Error fetching materials from Flask:",
@@ -509,15 +511,22 @@ export const getStudentSubmissionsController = async (req, res) => {
            materials = [];
          }
        }
-       const result = {
-          ...submission,
-          materials,
-        };
+       
+      // gross material to sub submission object
+       const submissionsWithMaterials = submission.map((sub) => {
+         const matchedMaterials = materials.filter(
+           (mat) => mat.submissionId === sub._id.toString()
+         );
+         return {
+           ...sub.toObject(),
+           materials: matchedMaterials,
+         };
+       });
 
         return res.status(200).send({
             success: true,
             message: "Fetched get all submission by student id successfully",
-            result
+            submissions: submissionsWithMaterials,
         });
 
     } catch (error) {

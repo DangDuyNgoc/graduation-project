@@ -18,6 +18,7 @@ import AssignmentPage from "./pages/dashboard/AssignmentPage";
 import SubmissionsPage from "./pages/dashboard/SubmissionsPage";
 import ProfilePage from "./pages/dashboard/ProfilePage";
 import TeachersPage from "./pages/dashboard/TeachersPage";
+// import ProtectedRoute from "./route/ProtectedRoute";
 
 const root = createBrowserRouter([
   {
@@ -55,6 +56,14 @@ const root = createBrowserRouter([
         path: "/teachers",
         element: <TeachersPage />,
       },
+      // {
+      //   path: "/course/:id",
+      //   element: (
+      //     <ProtectedRoute allowedRoles={["STUDENT", "TEACHER"]}>
+      //       <CourseDetail />
+      //     </ProtectedRoute>
+      //   ),
+      // },
     ],
   },
   {
