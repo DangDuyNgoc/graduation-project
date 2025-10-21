@@ -1,9 +1,26 @@
-// src/components/layout/Sidebar.jsx
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { Home, FileText, Upload, User, Users } from "lucide-react";
+import api from "@/utils/axiosInstance";
 
 const Sidebar = () => {
+  const [assignment, setAssignment] = useState(0);
+
+  const fetchAssignments = async () => {
+    try {
+      const res = await api.get("/assignment/get-assignments-for-student");
+      if (res.data?.success) {
+        setAssignment(res.data.total);
+      }
+    } catch (error) {
+      console.error("Error fetching assignment count: ", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchAssignments();
+  }, []);
+
   const menuItems = [
     {
       name: "Dashboard",
@@ -14,6 +31,7 @@ const Sidebar = () => {
       name: "Assignments",
       path: "/assignments",
       icon: <FileText className="size-4" />,
+      showCount: true,
     },
     {
       name: "My Submissions",
@@ -44,7 +62,14 @@ const Sidebar = () => {
             }
           >
             {item.icon}
-            {item.name}
+            <span className="relative">
+              {item.name}
+              {item.showCount && assignment > 0 && (
+                <span className="absolute -top-2 -right-4.5 bg-red-500 text-white text-xs font-semibold rounded-full px-2 py-0.5">
+                  {assignment}
+                </span>
+              )}
+            </span>
           </NavLink>
         ))}
       </nav>

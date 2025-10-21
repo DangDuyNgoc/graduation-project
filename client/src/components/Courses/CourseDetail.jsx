@@ -21,8 +21,6 @@ const CourseDetail = () => {
         withCredentials: true,
       });
 
-      console.log("data", data);
-
       if (data) {
         setCourse(data.course);
       }
@@ -35,7 +33,7 @@ const CourseDetail = () => {
         );
         navigate("/dashboard");
       } else {
-        toast.error("Failed to fetch course details.");
+        console.error("Failed to fetch course details.");
       }
     } finally {
       setLoading(false);

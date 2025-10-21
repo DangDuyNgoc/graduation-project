@@ -1,3 +1,4 @@
+import SearchBar from "@/components/Common/SearchBar";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import DashboardLayout from "@/layout/Dashboard";
@@ -52,16 +53,11 @@ function TeachersPage() {
       ) : (
         <div className="min-h-screen p-4">
           {/* search */}
-          <div className="relative max-w-md mx-auto mb-8">
-            <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
-            <Input
-              type="text"
-              placeholder="Search teachers by name or email..."
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <SearchBar
+            placeholder="Search teachers by name or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
 
           {/* Teachers Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

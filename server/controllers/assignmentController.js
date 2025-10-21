@@ -1,7 +1,6 @@
 import axios from "axios";
 import assignmentModel from "../models/assignmentModel.js";
 import courseModel from "../models/courseModel.js";
-import materialsModel from "../models/materialModel.js";
 import submissionModel from "../models/submissionModel.js";
 import { deleteObjects, deleteOneObject } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
@@ -143,15 +142,12 @@ export const getAssignmentController = async (req, res) => {
 
         const assignment = await assignmentModel
             .findById(id)
-            .populate("materials", "title s3_url fileType uploadedAt");
 
         const submission = await submissionModel
             .findOne({
                 assignment: id,
                 student: userId,
             })
-            .populate("materials", "title s3_url fileType uploadedAt")
-            .lean(); // read only
 
         if (!assignment) {
             return res.status(404).send({
@@ -164,7 +160,7 @@ export const getAssignmentController = async (req, res) => {
             success: true,
             message: "Assignment fetched Successfully",
             assignment,
-            submission: submission || null,
+            submission: submission || null
         })
     } catch (error) {
         console.log("Error in get assignment by id: ", error);
@@ -198,7 +194,7 @@ export const getAllAssignmentController = async (req, res) => {
 };
 
 // get all assignments for student
-export const getAllAssignmentFotStudentController = async (req, res) => {
+export const getAllAssignmentForStudentController = async (req, res) => {
     try {
         const studentId = req.user._id;
 
@@ -227,6 +223,8 @@ export const getAllAssignmentFotStudentController = async (req, res) => {
             assignment: { $in: assignments.map(a => a._id) }
         });
 
+        const now = new Date();
+
         // combine assignment + submission 
         const result = assignments.map(a => {
             const submission = submissions.find(
@@ -247,6 +245,22 @@ export const getAllAssignmentFotStudentController = async (req, res) => {
                 }
             };
 
+            const dueDate = new Date(a.dueDate);
+            let isOverdue = false;
+            let finalDeadline = dueDate;
+
+            if (a.allowLateSubmission && a.lateSubmissionDuration) {
+                finalDeadline = new Date(
+                    dueDate.getTime() + a.lateSubmissionDuration * 60000
+                )
+            };
+
+            if (now > finalDeadline) {
+                isOverdue = true;
+            };
+
+            const timeRemaining = Math.max(0, Math.floor((finalDeadline - now) / 60000));
+
             return {
                 assignmentId: a._id,
                 title: a.title,
@@ -259,7 +273,9 @@ export const getAllAssignmentFotStudentController = async (req, res) => {
                 status,
                 isLate,
                 lateDuration,
-                submittedAt: submission?.submittedAt || null
+                submittedAt: submission?.submittedAt || null,
+                isOverdue,
+                timeRemaining
             }
         });
 
@@ -399,35 +415,35 @@ export const deleteAssignmentController = async (req, res) => {
 
         // delete materials of submissions 
         const flaskResults = await Promise.allSettled(
-          submissions.map((sub) =>
-            axios.delete(
-              `http://localhost:5000/delete_submission/${sub._id.toString()}`
+            submissions.map((sub) =>
+                axios.delete(
+                    `http://localhost:5000/delete_submission/${sub._id.toString()}`
+                )
             )
-          )
         );
         const flaskKeys = flaskResults
-          .filter((r) => r.status === "fulfilled" && r.value?.data?.success)
-          .flatMap((r) => r.value.data.s3_key || [])
-          .filter(Boolean);
+            .filter((r) => r.status === "fulfilled" && r.value?.data?.success)
+            .flatMap((r) => r.value.data.s3_key || [])
+            .filter(Boolean);
 
         flaskResults
-          .filter((r) => r.status === "rejected" || !r.value?.data?.success)
-          .forEach((r) => {
-            console.error(
-              "Flask deletion failed:",
-              r.reason?.message || r.value?.data?.message || "Unknown error"
-            );
-          });
+            .filter((r) => r.status === "rejected" || !r.value?.data?.success)
+            .forEach((r) => {
+                console.error(
+                    "Flask deletion failed:",
+                    r.reason?.message || r.value?.data?.message || "Unknown error"
+                );
+            });
 
         const assignmentMaterials = assignment.materials || [];
         const allKeys = [
-          ...flaskKeys,
-          ...assignmentMaterials.map((m) => m.key),
+            ...flaskKeys,
+            ...assignmentMaterials.map((m) => m.key),
         ].filter(Boolean);
 
         // delete all materials from s3
         if (allKeys.length > 0) {
-          await deleteObjects(allKeys);
+            await deleteObjects(allKeys);
         }
 
         // delete submissions and assignment
@@ -562,19 +578,19 @@ export const deleteAllAssignmentController = async (req, res) => {
         let s3_key_map = [];
         let mess = null;
         try {
-          const flaskRes = await axios.delete(
-            `http://localhost:5000/delete_all_submissions`
-          );
-          const { success, s3_keys, message } = flaskRes.data || {};
-          mess = message;
-          if (success && Array.isArray(s3_keys) && s3_keys.length > 0) {
-            s3KeysFromFlask = s3_keys;
-          }
+            const flaskRes = await axios.delete(
+                `http://localhost:5000/delete_all_submissions`
+            );
+            const { success, s3_keys, message } = flaskRes.data || {};
+            mess = message;
+            if (success && Array.isArray(s3_keys) && s3_keys.length > 0) {
+                s3KeysFromFlask = s3_keys;
+            }
         } catch (error) {
-          console.error(
-            "Failed to delete all submissions in Flask: ",
-            error.message
-          );
+            console.error(
+                "Failed to delete all submissions in Flask: ",
+                error.message
+            );
         }
 
         // get all materials from assignments

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { UserContext } from "./UserContext.js";
-import api from "@/utils/axiosInstance.js";
+import api, { setUpInterceptors } from "@/utils/axiosInstance.js";
 import { LoaderCircle } from "lucide-react";
 
 const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
 
   // update user data
   const updateUser = (userData) => {
@@ -31,6 +32,10 @@ const UserProvider = ({ children }) => {
       }
     };
     fetchUser();
+  }, []);
+
+  useEffect(() => {
+    setUpInterceptors({ clearData });
   }, []);
 
   if (loading)

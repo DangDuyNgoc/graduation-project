@@ -7,7 +7,7 @@ import {
     deleteAssignmentController,
     deleteOneAssignmentMaterialController,
     getAllAssignmentController,
-    getAllAssignmentFotStudentController,
+    getAllAssignmentForStudentController,
     getAssignmentByCourseController,
     getAssignmentController,
     updateAssignmentController
@@ -25,7 +25,7 @@ assignmentRoute.get("/get-assignment-by-course/:id", getAssignmentByCourseContro
 assignmentRoute.get("/get-assignment/:id", isAuthenticated, getAssignmentController);
 assignmentRoute.get("/get-assignments-for-student/",
     isAuthenticated,
-    getAllAssignmentFotStudentController
+    getAllAssignmentForStudentController
 );
 assignmentRoute.get("/get-all-assignments", getAllAssignmentController);
 assignmentRoute.put("/update-assignment/:id",

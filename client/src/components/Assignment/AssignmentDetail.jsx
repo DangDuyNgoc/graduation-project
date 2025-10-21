@@ -27,8 +27,26 @@ const AssignmentDetail = () => {
       if (data.success) {
         setAssignment(data.assignment);
         setSubmission(data.submission);
+        if (data.submission._id) {
+          console.log(data.submission._id);
+          try {
+            const subRes = await api.get(
+              `/submission/get-submission/${data.submission._id}`,
+              {
+                withCredentials: true,
+              }
+            );
+            if (subRes.data.success) {
+              setSubmission(subRes.data.result);
+            }
+          } catch (error) {
+            console.log("Error fetching detailed submission:", error);
+          }
+        }
       } else {
-        toast.error(data.message || "Failed to load assignment");
+        toast.error(data.message || "Failed to load assignment", {
+          id: "enroll_error",
+        });
       }
     } catch (error) {
       console.log(error);
@@ -100,11 +118,14 @@ const AssignmentDetail = () => {
 
       formData.append("keepOld", keepOld);
 
-      const endpoint = submission
+      const isUpdate = Boolean(submission?._id);
+      const endpoint = isUpdate
         ? `/submission/update-submission/${submission._id}`
         : `/submission/add-submission/${id}`;
 
-      const { data } = await api.post(endpoint, formData, {
+      const method = isUpdate ? "put" : "post";
+
+      const { data } = await api[method](endpoint, formData, {
         withCredentials: true,
         headers: {
           "Content-Type": "multipart/form-data",
@@ -116,7 +137,7 @@ const AssignmentDetail = () => {
             ? "Submission Updated!"
             : "Submission uploaded successfully!"
         );
-        fetchAssignments();
+        await fetchAssignments();
         setSelectedFile([]);
         navigate("/assignments");
       } else {
@@ -290,7 +311,9 @@ const AssignmentDetail = () => {
                       <div className="flex items-center space-x-3">
                         <FileText className="text-blue-500" size={18} />
                         <span className="text-gray-800 text-sm truncate max-w-[250px]">
-                          {mat.title || mat.s3_url.split("/").pop()}
+                          {mat.title ||
+                            mat.s3_url?.split("/").pop() ||
+                            "Unnamed File"}
                         </span>
                       </div>
                       <a
@@ -348,7 +371,10 @@ const AssignmentDetail = () => {
                 disabled={isSubmitting || selectedFile.length === 0}
               >
                 {isSubmitting ? (
-                  <LoaderCircle className="size-8 animate-spin text-primary"></LoaderCircle>
+                  <>
+                    <LoaderCircle className="animate-spin mr-2 size-5 text-white" />
+                    <span>Submitting...</span>
+                  </>
                 ) : submission ? (
                   "Update Assignment"
                 ) : (

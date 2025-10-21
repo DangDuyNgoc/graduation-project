@@ -1,15 +1,20 @@
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hook/useAuth";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
 import { LoaderCircle } from "lucide-react";
 import React, { useState, useMemo, useEffect } from "react";
 import toast from "react-hot-toast";
+import { FileLock2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { formatLateDuration } from "@/utils/timeFormatter";
 
 const AssignmentPage = () => {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [sortBy, setSortBy] = useState("dueDate");
+
+  useAuth();
 
   const navigate = useNavigate();
 
@@ -26,7 +31,8 @@ const AssignmentPage = () => {
     } catch (error) {
       console.log(error);
       toast.error(
-        error?.response?.data?.message || "Failed to fetch assignments"
+        error?.response?.data?.message || "Failed to fetch assignments",
+        { id: "enroll_error" }
       );
     } finally {
       setLoading(false);
@@ -57,7 +63,7 @@ const AssignmentPage = () => {
         return new Date(a.dueDate) - new Date(b.dueDate);
       }
       if (sortBy === "status") {
-        const order = { "Not Submit": 1, "Late Submitted": 2, "Submitted": 3 };
+        const order = { "Not Submit": 1, "Late Submitted": 2, Submitted: 3 };
         return order[a.status] - order[b.status];
       }
 
@@ -120,96 +126,81 @@ const AssignmentPage = () => {
               </thead>
 
               <tbody className="bg-white divide-y divide-gray-200">
-                {sortedAssignments.map((a) => (
-                  <tr key={a.assignmentId} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {a.title}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {a.courseName || "—"}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {a.teacherName || "—"}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      {new Date(a.dueDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {a.allowLateSubmission ? (
-                        a.status === "Late Submitted" ? (
-                          <span className="text-red-600 font-semibold">
-                            Late by {a.lateDuration}h
-                          </span>
+                {sortedAssignments.map((a) => {
+                  const finalDeadline = new Date(
+                    new Date(a.dueDate).getTime() +
+                      (a.allowLateSubmission && a.lateSubmissionDuration
+                        ? a.lateSubmissionDuration * 60000
+                        : 0)
+                  );
+
+                  const formattedDue = new Date(a.dueDate).toLocaleDateString();
+                  const formattedFinalDeadline =
+                    finalDeadline.toLocaleDateString();
+
+                  return (
+                    <tr key={a.assignmentId} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                        {a.title}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {a.courseName || "—"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {a.teacherName || "—"}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {formattedDue}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {a.allowLateSubmission ? (
+                          a.isOverdue ? (
+                            <span className="text-gray-400 italic">
+                              Closed (
+                              {formatLateDuration(a.lateSubmissionDuration)}{" "}
+                              allowed)
+                            </span>
+                          ) : (
+                            <span className="text-green-600 font-medium">
+                              Allowed (
+                              {formatLateDuration(a.lateSubmissionDuration)})
+                            </span>
+                          )
                         ) : (
-                          <span className="text-green-600 font-medium">
-                            Allowed ({a.lateSubmissionDuration}h)
+                          <span className="text-gray-400 italic">
+                            Not allowed
                           </span>
-                        )
-                      ) : (
-                        <span className="text-gray-400 italic">
-                          Not allowed
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={getStatusBadge(a.status)}>
+                          {a.status}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={getStatusBadge(a.status)}>
-                        {a.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      {(() => {
-                        const { status, allowLateSubmission, assignmentId } = a;
-
-                        // if not submit
-                        if (status === "Not Submit") {
-                          return (
-                            <Button
-                              onClick={() =>
-                                navigate(`/assignment/${assignmentId}`)
-                              }
-                              size="sm"
-                            >
-                              Go to assignment
-                            </Button>
-                          );
-                        }
-
-                        // if late submitted
-                        if (status === "Late Submitted") {
-                          return allowLateSubmission ? (
-                            <Button
-                              onClick={() =>
-                                navigate(`/assignment/${assignmentId}`)
-                              }
-                              size="sm"
-                            >
-                              Update Submission
-                            </Button>
-                          ) : (
-                            <span className="text-gray-400 italic">Closed</span>
-                          );
-                        }
-
-                        // if submitted on time
-                        if (status === "Submitted") {
-                          return allowLateSubmission ? (
-                            <Button
-                              onClick={() =>
-                                navigate(`/assignment/${assignmentId}`)
-                              }
-                              size="sm"
-                            >
-                              Update Submission
-                            </Button>
-                          ) : (
-                            <span className="text-gray-400 italic">Locked</span>
-                          );
-                        }
-                        return null;
-                      })()}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        {a.isOverdue ? (
+                          <div
+                            className="text-gray-400 italic text-sm cursor-not-allowed flex items-center gap-1"
+                            title={`Deadline passed on ${formattedFinalDeadline}`}
+                          >
+                            <FileLock2 size="16" /> Locked
+                          </div>
+                        ) : (
+                          <Button
+                            onClick={() =>
+                              navigate(`/assignment/${a.assignmentId}`)
+                            }
+                            size="sm"
+                          >
+                            {a.status === "Not Submit"
+                              ? "Go to assignment"
+                              : "Update Submission"}
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { UserContext } from "@/context/UserContext";
+import { useAuth } from "@/hook/useAuth";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
 
@@ -19,6 +20,7 @@ import toast from "react-hot-toast";
 
 const ProfilePage = () => {
   const { user, updateUser } = useContext(UserContext);
+  useAuth();
 
   const [image, setImage] = useState(null);
   const [formData, setFormData] = useState({
@@ -54,7 +56,7 @@ const ProfilePage = () => {
       });
 
       if (data.success) {
-        toast.success("Avatar updated successfully!");
+        toast.success("Avatar updated successfully!", { id: "enroll_error" });
         updateUser(data.user);
         setImage(null);
       }
