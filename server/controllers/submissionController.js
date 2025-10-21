@@ -368,15 +368,20 @@ export const getAllSubmissionController = async (req, res) => {
               }
             }
 
-            const result = {
-              ...submissions,
-              materials,
-            };
+            const submissionsWithMaterials = submissions.map((sub) => {
+              const matchedMaterials = materials.filter(
+                (mat) => mat.submissionId === sub._id.toString()
+              );
+              return {
+                ...sub.toObject(),
+                materials: matchedMaterials,
+              };
+            });
 
             res.status(200).send({
               success: true,
               message: "Get all submissions successfully",
-              result,
+              submissions: submissionsWithMaterials,
             });
     } catch (error) {
         console.log("Error in get all submissions: ", error);
@@ -423,7 +428,7 @@ export const getSubmissionController = async (req, res) => {
             error.response?.data || error.message
           );
         }
-        const result = {
+        const submissions = {
           ...submission.toObject(),
           materials,
         };
@@ -451,8 +456,7 @@ export const getSubmissionController = async (req, res) => {
         return res.status(200).send({
             success: true,
             message: "Fetched Submission Successfully",
-            result,
-            blockchainSubmissions
+            submissions
         })
 
     } catch (error) {

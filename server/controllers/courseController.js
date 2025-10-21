@@ -193,10 +193,7 @@ export const getAllCourseController = async (req, res) => {
                   : [];
 
               const courseObj = course.toObject();
-              courseObj.teacherId = {
-                ...courseObj.teacherId,
-                materialFlask: materialsFromFlask,
-              };
+              courseObj.materials = materialsFromFlask;
 
               return courseObj;
             } catch (err) {
