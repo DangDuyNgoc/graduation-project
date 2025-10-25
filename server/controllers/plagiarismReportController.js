@@ -44,7 +44,6 @@ export const checkPlagiarismController = async (req, res) => {
     const mappedSources = data.matchedSources.map((s) => ({
       sourceType: s.sourceType,
       sourceId: s.sourceId,
-      chunkText: s.chunkText,
       matchedText: s.matchedText,
       similarity: s.similarity,
     }));

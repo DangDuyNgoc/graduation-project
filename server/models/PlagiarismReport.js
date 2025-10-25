@@ -18,9 +18,6 @@ const PlagiarismReportSchema = new mongoose.Schema({
             sourceId: {
                 type: String
             },
-            chunkText: {
-                type: String
-            },
             matchedText: {
                 type: String
             },
