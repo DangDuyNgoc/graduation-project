@@ -20,6 +20,10 @@ const conversationSchema = new mongoose.Schema({
     lastMessageAt: {
         type: Date,
         default: Date.now
+    },
+    groupAdmin: {
+        type: mongoose.Types.ObjectId,
+        ref: "user"
     }
 }, { timestamps: true });
 

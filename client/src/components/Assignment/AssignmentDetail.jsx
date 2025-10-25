@@ -1,10 +1,22 @@
-import DashboardLayout from "@/layout/Dashboard";
+import { useParams } from "react-router-dom";
 import api from "@/utils/axiosInstance";
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { useNavigate, useParams } from "react-router-dom";
-import { Button } from "../ui/button";
 import { LoaderCircle, FileUp, Paperclip, FileText } from "lucide-react";
+
+import DashboardLayout from "@/layout/Dashboard";
+import { Button } from "../ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import PlagiarismReport from "../PlagiarismReport/PlagiarismReport ";
 
 const AssignmentDetail = () => {
   const { id } = useParams(); // assignment id
@@ -14,8 +26,10 @@ const AssignmentDetail = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [keepOld, setKeepOld] = useState(true);
+  const [plagiarismReport, setPlagiarismReport] = useState(null);
+  const [modal, setModal] = useState(false);
 
-  const navigate = useNavigate();
+  const ALLOWED_SIMILARITY = 0.3;
 
   const fetchAssignments = async () => {
     setLoading(true);
@@ -28,7 +42,6 @@ const AssignmentDetail = () => {
         setAssignment(data.assignment);
         setSubmission(data.submission);
         if (data.submission._id) {
-          console.log(data.submission._id);
           try {
             const subRes = await api.get(
               `/submission/get-submission/${data.submission._id}`,
@@ -37,10 +50,24 @@ const AssignmentDetail = () => {
               }
             );
             if (subRes.data.success) {
-              setSubmission(subRes.data.result);
+              setSubmission(subRes.data.submissions);
             }
           } catch (error) {
             console.log("Error fetching detailed submission:", error);
+          }
+        }
+        console.log(data.submission._id);
+        if (data.submission && data.submission._id) {
+          try {
+            const reportRes = await api.get(
+              `/plagiarism/get-plagiarism-report/${data.submission._id}`,
+              { withCredentials: true }
+            );
+            if (reportRes.data.success) {
+              setPlagiarismReport(reportRes.data.report);
+            }
+          } catch (error) {
+            console.log("No plagiarism report found yet", error);
           }
         }
       } else {
@@ -110,6 +137,14 @@ const AssignmentDetail = () => {
     if (!selectedFile) return toast.error("Please select a file first!");
     setIsSubmitting(true);
 
+    if (
+      plagiarismReport &&
+      plagiarismReport.similarityScore > ALLOWED_SIMILARITY
+    ) {
+      setModal(true);
+      return;
+    }
+
     try {
       const formData = new FormData();
       selectedFile.forEach((file) => {
@@ -139,7 +174,47 @@ const AssignmentDetail = () => {
         );
         await fetchAssignments();
         setSelectedFile([]);
-        navigate("/assignments");
+
+        try {
+          const newSubmissionId = data.submission._id;
+
+          if (newSubmissionId) {
+            toast.loading("Checking plagiarism...", { id: "plagiarism_check" });
+            const plagiarismRes = await api.get(
+              `/plagiarism/check-plagiarism/${newSubmissionId}`,
+              { withCredentials: true }
+            );
+            toast.dismiss("plagiarism_check");
+
+            if (plagiarismRes.data.success) {
+              setPlagiarismReport(plagiarismRes.data.report);
+
+              if (
+                plagiarismRes.data.report.similarityScore > ALLOWED_SIMILARITY
+              ) {
+                toast.error("High plagiarism detected in your submission!", {
+                  id: "plagiarism_result",
+                });
+                setModal(true);
+              } else {
+                toast.success("Plagiarism check passed!", {
+                  id: "plagiarism_result",
+                });
+              }
+            } else {
+              toast.error(
+                plagiarismRes.data.message || "Plagiarism check failed",
+                { id: "plagiarism_result" }
+              );
+            }
+          } else {
+            toast.error("Invalid submission ID for plagiarism check", {
+              id: "plagiarism_result",
+            });
+          }
+        } catch (error) {
+          console.log(error);
+        }
       } else {
         toast.error(data.message || "Submission failed");
       }
@@ -147,6 +222,32 @@ const AssignmentDetail = () => {
       console.log(error);
     } finally {
       setIsSubmitting(false);
+      setModal(false);
+    }
+  };
+
+  const handleCheckPlagiarism = async (submissionId) => {
+    setLoading(true);
+    try {
+      const { data } = await api.get(
+        `/plagiarism/check-plagiarism/${submissionId}`,
+        {
+          withCredentials: true,
+        }
+      );
+      if (data.success) {
+        toast.success("Plagiarism check completed", { id: "plagiarism_check" });
+        setPlagiarismReport(data.report);
+      } else {
+        toast.error(data.message || "Plagiarism check failed", {
+          id: "plagiarism_check",
+        });
+      }
+    } catch (error) {
+      console.log(error);
+      toast.error("Failed to check plagiarism", { id: "plagiarism_check" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -382,6 +483,43 @@ const AssignmentDetail = () => {
                 )}
               </Button>
             </div>
+
+            {plagiarismReport && (
+              <PlagiarismReport
+                report={plagiarismReport}
+                onCheck={() =>
+                  submission && handleCheckPlagiarism(submission._id)
+                }
+                threshold={ALLOWED_SIMILARITY}
+              />
+            )}
+
+            {/* Modal */}
+            {plagiarismReport && (
+              <AlertDialog open={modal} onOpenChange={setModal}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      High Plagiarism Detected
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Your submission has a high similarity score (
+                      {(plagiarismReport?.similarityScore * 100).toFixed(2)}
+                      %). Are you sure you want to continue submitting this
+                      assignment?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setModal(false)}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction onClick={handleSubmit}>
+                      Submit Anyway
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         ) : (
           <p className="text-gray-500 italic">

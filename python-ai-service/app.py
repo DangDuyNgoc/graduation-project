@@ -484,7 +484,6 @@ def delete_all_courses():
     finally:
         conn.close()
 
-
 # get materials by submission
 @app.route("/get_materials_by_submission/<submission_id>", methods=["GET"])
 def get_materials_by_submission(submission_id):
@@ -1228,7 +1227,6 @@ def check_plagiarism(submission_id):
     except Exception as e:
         print(f"[ERROR /check_plagiarism] {e}")
         return jsonify({"success": False, "message": str(e)}), 500
-
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)

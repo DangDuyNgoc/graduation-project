@@ -152,7 +152,9 @@ export const getCourseByIdController = async (req, res) => {
             (studentId) => studentId.toString() === userId.toString()
         );
 
-        if (!isEnrolled) {
+        const isTeacher = course.teacherId._id.toString() === userId.toString();
+
+        if (!isEnrolled && !isTeacher) {
             return res.status(403).json({
                 success: false,
                 message: "You have not enrolled in this course yet.",
@@ -173,6 +175,8 @@ export const getCourseByIdController = async (req, res) => {
         })
     }
 };
+
+// get course for teacher
 
 export const getAllCourseController = async (req, res) => {
     try {
@@ -342,7 +346,6 @@ export const updateCourseController = async (req, res) => {
 
               if (flaskRes.data.success) {
                 materialId = flaskRes.data._id;
-                console.log("Flask material saved:", materialId);
 
                 await axios.post(
                   `http://localhost:5000/process_material/${materialId}`
