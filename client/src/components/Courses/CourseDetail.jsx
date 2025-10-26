@@ -22,7 +22,8 @@ const CourseDetail = () => {
       });
 
       if (data) {
-        setCourse(data.course);
+        console.log(data.result);
+        setCourse(data.result);
       }
     } catch (error) {
       if (error.response?.status === 403) {
@@ -84,9 +85,6 @@ const CourseDetail = () => {
                 <span>Duration: {course.duration}</span>
                 <span>Enrolled: {course.studentIds?.length}</span>
               </div>
-              <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition duration-300">
-                Enroll Now
-              </button>
             </div>
           </div>
 

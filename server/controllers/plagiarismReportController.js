@@ -44,7 +44,6 @@ export const checkPlagiarismController = async (req, res) => {
     const mappedSources = data.matchedSources.map((s) => ({
       sourceType: s.sourceType,
       sourceId: s.sourceId,
-      chunkText: s.chunkText,
       matchedText: s.matchedText,
       similarity: s.similarity,
     }));
@@ -91,3 +90,38 @@ export const checkPlagiarismController = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+export const getPlagiarismReportController = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+
+    if (!submissionId) {
+      return res.status(400).send({
+        success: false,
+        message: "SubmissionId is required"
+      });
+    }
+
+    const report = await PlagiarismReportModel.findOne({ submissionId })
+
+    if (!report) {
+      return res.status(404).send({
+        success: false,
+        message: "Plagiarism report not found"
+      });
+    };
+
+    res.status(200).send({
+      success: true,
+      message: "Plagiarism report fetched successfully",
+      report
+    });
+  } catch (error) {
+    console.error("[ERROR getPlagiarismReportController]", error);
+    res.status(500).send({
+      success: false,
+      message: "Error getting plagiarism report",
+      error: error.message
+    })
+  }
+}

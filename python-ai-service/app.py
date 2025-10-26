@@ -484,7 +484,6 @@ def delete_all_courses():
     finally:
         conn.close()
 
-
 # get materials by submission
 @app.route("/get_materials_by_submission/<submission_id>", methods=["GET"])
 def get_materials_by_submission(submission_id):
@@ -931,7 +930,7 @@ def extract_keywords(text, top_n=25):
 
 # check material chunks online and database and return result
 def check_plagiarism_material(
-    material_id, num_results=5, exact_threshold=0.85, semantic_threshold=0.85, top_k=5
+    material_id, num_results=5, exact_threshold=0.85, semantic_threshold=0.75, top_k=5
 ):
     results = {"online": [], "database": []}
     total_sim = 0.0
@@ -948,8 +947,11 @@ def check_plagiarism_material(
     chunks = cursor.fetchall()
     print(f"[INFO] Found {len(chunks)} chunks for material_id={material_id}")
 
-    # keep course index (remove submission)
-    faiss_indexes = [("course", faiss_course_index)]
+    # load faiss
+    faiss_indexes = [
+        ("course", faiss_course_index),
+        ("submission", faiss_submission_index),
+    ]
 
     for idx, (faiss_id, chunk_text, embedding_json) in enumerate(chunks, 1):
         total_chunks += 1
@@ -1154,8 +1156,7 @@ def check_plagiarism(submission_id):
                 continue
             if chunk not in best_online or sim > best_online[chunk]["similarity"]:
                 best_online[chunk] = {
-                    "chunkText": chunk,
-                    "matchedText": match.get("snippet"),
+                    "matchedText": chunk,
                     "similarity": sim,
                     "sourceType": "external",
                     "sourceId": match.get("url"),
@@ -1170,8 +1171,7 @@ def check_plagiarism(submission_id):
                 continue
             if chunk not in best_database or sim > best_database[chunk]["similarity"]:
                 best_database[chunk] = {
-                    "chunkText": chunk,
-                    "matchedText": match.get("neighborText"),
+                    "matchedText": chunk,
                     "similarity": sim,
                     "sourceType": "internal",
                     "sourceId": str(match.get("neighborMaterialId")),
@@ -1193,8 +1193,7 @@ def check_plagiarism(submission_id):
                 best = db
             else:
                 best = {
-                    "chunkText": chunk,
-                    "matchedText": None,
+                    "matchedText": chunk,
                     "similarity": 0.0,
                     "sourceType": None,
                     "sourceId": None,
@@ -1228,7 +1227,6 @@ def check_plagiarism(submission_id):
     except Exception as e:
         print(f"[ERROR /check_plagiarism] {e}")
         return jsonify({"success": False, "message": str(e)}), 500
-
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
