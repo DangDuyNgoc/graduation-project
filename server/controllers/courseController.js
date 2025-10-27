@@ -7,6 +7,7 @@ import { putObject } from "../utils/putObject.js";
 import assignmentModel from "../models/assignmentModel.js";
 import submissionModel from "../models/submissionModel.js";
 import uploadImageCloudinary from "../utils/uploadImage.js";
+import PlagiarismReportModel from "../models/PlagiarismReport.js";
 
 export const createCourseController = async (req, res) => {
     req.file = req.files?.thumbnail?.[0];
@@ -176,7 +177,67 @@ export const getCourseByIdController = async (req, res) => {
     }
 };
 
-// get course for teacher
+// get courses by teacher id
+export const getCoursesByTeacherId =  async(req, res) => {
+  const teacherId = req.user._id;
+  try {
+    if (!teacherId) {
+      return res.status(400).send({
+        success: false,
+        message: "Please provide ID of course",
+      });
+    }
+
+    const courses = await courseModel.find({ teacherId }).populate("teacherId");
+    if (!courses || courses.length === 0) {
+      return res.status(404).send({
+        success: false,
+        message: "Course not found",
+      });
+    }
+
+    const coursesWithMaterials = await Promise.all(
+      courses.map(async (course) => {
+        try {
+          const flaskRes = await axios.get(
+            `http://localhost:5000/get_materials_by_course/${course._id.toString()}`
+          );
+
+          const materialsFromFlask =
+            flaskRes.data?.success && Array.isArray(flaskRes.data.materials)
+              ? flaskRes.data.materials
+              : [];
+
+          const courseObj = course.toObject();
+          courseObj.materials = materialsFromFlask;
+
+          return courseObj;
+        } catch (err) {
+          console.log(
+            `[WARNING] Failed to fetch materials for course ${course._id}:`,
+            err.message
+          );
+          return {
+            ...course.toObject(),
+            materials: [],
+          };
+        }
+      })
+    );
+
+    return res.status(200).send({
+      success: true,
+      message: "Courses fetched successfully",
+      course: coursesWithMaterials,
+    });
+  } catch (error) {
+    console.log("Error in get courses teacher: ", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+}
 
 export const getAllCourseController = async (req, res) => {
     try {
@@ -543,6 +604,11 @@ export const deleteCourseController = async (req, res) => {
             // get all submissions of the assignments
             const submissions = await submissionModel.find({ assignment: { $in: assignmentIds } });
             const submissionIds = submissions.map(s => s._id);
+            
+            // delete plagiarismReport from DB
+            await PlagiarismReportModel.deleteMany({
+              submissionId: { $in: submissionIds },
+            });
 
             // delete submissions from DB
             await submissionModel.deleteMany({ _id: { $in: submissionIds } });
@@ -611,8 +677,9 @@ export const deleteAllCourseController = async (req, res) => {
       const allKeys = s3_key_map.flat(Infinity).filter(Boolean);
       if (allKeys.length > 0) await deleteObjects(allKeys);
 
-      // delete all data from DB: courses, assignments and submissions
+      // delete all data from DB: courses, assignments, submissions, and plagiarismReport
       await Promise.all([
+        PlagiarismReportModel.deleteMany({}),
         submissionModel.deleteMany({}),
         assignmentModel.deleteMany({}),
         courseModel.deleteMany({}),

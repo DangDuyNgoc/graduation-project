@@ -8,6 +8,7 @@ import { deleteObjects } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
 import contract from "../utils/blockchain.js";
 import courseModel from "../models/courseModel.js";
+import PlagiarismReportModel from "../models/PlagiarismReport.js";
 
 export const uploadSubmissionController = async (req, res) => {
   try {
@@ -613,6 +614,7 @@ export const deleteOneSubmissionController = async (req, res) => {
     }
 
     await submissionModel.findByIdAndDelete(id);
+    await PlagiarismReportModel.deleteOne({ submissionId: id });
 
     return res.status(200).send({
       success: true,
@@ -654,6 +656,7 @@ export const deleteAllSubmissionsController = async (req, res) => {
         message: "No submissions found for this assignment"
       });
     };
+    const submissionIds = submissions.map((s) => s._id.toString());
 
     let s3Keys = [];
     try {
@@ -676,10 +679,15 @@ export const deleteAllSubmissionsController = async (req, res) => {
     }
 
     await submissionModel.deleteMany({ assignment: id });
+    await PlagiarismReportModel.deleteMany({
+      submissionId: { $in: submissionIds },
+    });
 
     return res.status(200).send({
       success: true,
-      message: "Deleted all submissions of an assignment successfully"
+      message: "Deleted all submissions of an assignment successfully",
+      deletedSubmissions: submissionIds.length,
+      deletedFiles: s3Keys.length,
     });
 
   } catch (error) {

@@ -72,7 +72,7 @@ const CourseDetail = () => {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
             <img
-              src={course.thumbnail}
+              src={course.thumbnail?.url}
               alt={course.name}
               className="w-full h-64 object-cover"
             />

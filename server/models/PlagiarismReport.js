@@ -9,26 +9,23 @@ const PlagiarismReportSchema = new mongoose.Schema({
     similarityScore: {
         type: Number
     },
-    matchedSources: [
+    files: [
+    {
+      materialId: {
+        type: String,
+        required: true
+      },
+      fileName: String,
+      matchedSources: [
         {
-            sourceType: {
-                type: String,
-                enum: ["internal", "external"]
-            },
-            sourceId: {
-                type: String
-            },
-            matchedText: {
-                type: String
-            },
-            similarity: {
-                type: Number // % duplicate paragraphs
-            }
+          sourceType: { type: String, enum: ["internal", "external"] },
+          sourceId: String,
+          matchedText: String,
+          similarity: Number
         }
-    ],
-    reportDetails: {
-        type: mongoose.Schema.Types.Mixed,
-    },
+      ]
+    }
+  ],
 }, { timestamps: true });
 
 const PlagiarismReportModel = mongoose.model("plagiarismReport", PlagiarismReportSchema);

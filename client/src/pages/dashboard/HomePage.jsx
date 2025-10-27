@@ -77,7 +77,7 @@ function HomePage() {
                 className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-all"
               >
                 <img
-                  src={course.thumbnail || "https://placehold.co/600x400"}
+                  src={course.thumbnail?.url || "https://placehold.co/600x400"}
                   alt={course.title}
                   className="rounded-t-xl w-full h-40 object-cover"
                 />

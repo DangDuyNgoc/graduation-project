@@ -8,80 +8,84 @@ export const checkPlagiarismController = async (req, res) => {
 
     const submission = await submissionModel.findById(submissionId);
     if (!submission) {
-      return res.status(404).send({
+      return res.status(404).json({
         success: false,
-        message: "Submission Not found"
+        message: "Submission not found",
       });
-    };
-
-    if (submissionId) {
-      const flaskCheck = await axios.get(
-        `http://localhost:5000/get_materials_by_submission/${submissionId.toString()}`
-      );
-      if (flaskCheck.data?.materials.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "Server can't not find materials of submission",
-        });
-      }
     }
 
-    // Call Flask plagiarism checking API
     const flaskResponse = await axios.get(
-      `http://localhost:5000/check_plagiarism/${submissionId.toString()}`
+      `http://localhost:5000/check_plagiarism/${submissionId}`
     );
-    const data = flaskResponse.data;
 
+    const data = flaskResponse.data;
     if (!data.success) {
       return res.status(500).json({
         success: false,
-        message: "Flask analysis failed",
+        message: "Flask plagiarism analysis failed",
       });
     }
 
-    const materialId = data.materialId;
-    // Prepare mapped sources for DB
-    const mappedSources = data.matchedSources.map((s) => ({
-      sourceType: s.sourceType,
-      sourceId: s.sourceId,
-      matchedText: s.matchedText,
-      similarity: s.similarity,
+    const files = data.files || [];
+    if (files.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No files found in Flask report",
+      });
+    }
+
+    // transform and normalize Flask data
+    const mappedFiles = files.map((file) => ({
+      materialId: file.materialId,
+      fileName: file.fileName,
+      matchedSources: (file.matchedSources || []).map((src) => ({
+        sourceType: src.sourceType,
+        sourceId: src.sourceId,
+        matchedText: src.matchedText,
+        similarity: src.similarity,
+      })),
+      similarityScore: Number(file.similarityScore?.toFixed(4) || 0),
+      reportDetails: file.reportDetails,
     }));
 
-    // Check if report already exists
-    let existingReport = await PlagiarismReportModel.findOne({ submissionId });
+    // compute overall similarity across all files
+    const overallSimilarity =
+      mappedFiles.length > 0
+        ? Number(
+            (
+              mappedFiles.reduce(
+                (sum, f) => sum + (f.similarityScore || 0),
+                0
+              ) / mappedFiles.length
+            ).toFixed(4)
+          )
+        : 0;
 
-    if (existingReport) {
-      // Update existing report
-      existingReport.similarityScore = data.similarityScore;
-      existingReport.matchedSources = mappedSources;
-      existingReport.reportDetails = {
-        materialId,
-        totalSources: mappedSources.length,
-      };
+    // check if a plagiarism report already exists
+    let report = await PlagiarismReportModel.findOne({ submissionId });
 
-      await existingReport.save();
+    if (report) {
+      // update existing report
+      report.similarityScore = overallSimilarity;
+      report.files = mappedFiles;
+      await report.save();
 
       return res.status(200).json({
         success: true,
-        message: "Plagiarism report updated",
-        report: existingReport,
+        message: "Plagiarism report updated successfully",
+        report,
       });
     } else {
-      // Create new report
+      // create a new report
       const newReport = await PlagiarismReportModel.create({
         submissionId,
-        similarityScore: data.similarityScore,
-        matchedSources: mappedSources,
-        reportDetails: {
-          materialId,
-          totalSources: mappedSources.length,
-        },
+        similarityScore: overallSimilarity,
+        files: mappedFiles,
       });
 
-      return res.status(200).json({
+      return res.status(201).json({
         success: true,
-        message: "Plagiarism report created",
+        message: "Plagiarism report created successfully",
         report: newReport,
       });
     }

@@ -18,7 +18,9 @@ import AssignmentPage from "./pages/dashboard/AssignmentPage";
 import SubmissionsPage from "./pages/dashboard/SubmissionsPage";
 import ProfilePage from "./pages/dashboard/ProfilePage";
 import TeachersPage from "./pages/dashboard/TeachersPage";
-// import ProtectedRoute from "./route/ProtectedRoute";
+import ProtectedRoute from "./route/ProtectedRoute";
+import TeacherCoursePage from "./pages/dashboard/TeacherCoursePage";
+import TeacherAssignmentPage from "./pages/dashboard/TeacherAssignmentPage";
 
 const root = createBrowserRouter([
   {
@@ -55,6 +57,22 @@ const root = createBrowserRouter([
       {
         path: "/teachers",
         element: <TeachersPage />,
+      },
+      {
+        path: "/teacher-courses",
+        element: (
+          <ProtectedRoute allowedRoles={["TEACHER"]}>
+            <TeacherCoursePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/teacher-assignment/:id",
+        element: (
+          <ProtectedRoute allowedRoles={["TEACHER"]}>
+            <TeacherAssignmentPage />
+          </ProtectedRoute>
+        ),
       },
       // {
       //   path: "/course/:id",

@@ -276,7 +276,7 @@ def get_materials_by_course(course_id):
             SELECT id, title, s3_url, s3_key, fileType, courseId, submissionId,
                    ownerType, chunkCount, extractedTextLength, processingStatus
             FROM materials
-            WHERE courseId = ?
+            WHERE courseId = ? AND ownerType = 'courseMaterial'
             """,
             (course_id,),
         )
@@ -483,6 +483,7 @@ def delete_all_courses():
 
     finally:
         conn.close()
+
 
 # get materials by submission
 @app.route("/get_materials_by_submission/<submission_id>", methods=["GET"])
@@ -1094,17 +1095,16 @@ def check_plagiarism_material(
 @app.route("/check_plagiarism/<submission_id>", methods=["GET"])
 def check_plagiarism(submission_id):
     try:
-        # Load all materials in submission
+        # Fetch all materials belonging to this submission
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id FROM materials WHERE submissionId = ?", (submission_id,)
+            "SELECT id, title FROM materials WHERE submissionId = ?", (submission_id,)
         )
         material_rows = cursor.fetchall()
-        material_ids = [row[0] for row in material_rows]
         conn.close()
 
-        if not material_ids:
+        if not material_rows:
             return (
                 jsonify(
                     {
@@ -1115,111 +1115,112 @@ def check_plagiarism(submission_id):
                 404,
             )
 
-        print(f"[INFO] Submission {submission_id} has {len(material_ids)} materials")
+        print(f"[INFO] Submission {submission_id} has {len(material_rows)} materials")
 
-        # Load all chunks from these materials
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        placeholders = ",".join("?" * len(material_ids))
-        cursor.execute(
-            f"SELECT id, materialId, text FROM chunks WHERE materialId IN ({placeholders})",
-            material_ids,
-        )
-        chunk_rows = cursor.fetchall()
-        conn.close()
+        files_result = []
 
-        all_chunks = [row[2] for row in chunk_rows]
-        print(f"[INFO] Total {len(all_chunks)} chunks in submission {submission_id}")
+        # Process each material
+        for mid, title in material_rows:
+            print(f"[SCAN] Checking material {mid} ({title}) ...")
 
-        # Run plagiarism scan for each material, combine all 'online' and 'database' results
-        all_online = []
-        all_database = []
+            # Load all chunks for this material
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, text FROM chunks WHERE materialId = ?", (mid,))
+            chunk_rows = cursor.fetchall()
+            conn.close()
 
-        for mid in material_ids:
+            all_chunks = [row[1] for row in chunk_rows]
+
             try:
-                print(f"[SCAN] Checking material {mid} ...")
+                # Perform plagiarism detection for this material
                 res = check_plagiarism_material(mid)
-                all_online.extend(res.get("online", []))
-                all_database.extend(res.get("database", []))
+                online = res.get("online", [])
+                database = res.get("database", [])
             except Exception as sub_err:
                 print(f"[WARN] Error scanning material {mid}: {sub_err}")
                 continue
 
-        results = {"online": all_online, "database": all_database}
+            # Aggregate best matches for online and database sources
+            best_online = {}
+            best_database = {}
 
-        # Best ONLINE match
-        best_online = {}
-        for match in results["online"]:
-            chunk = match.get("chunkText")
-            sim = match.get("semantic_sim", match.get("exact_sim", 0.0))
-            if not chunk:
-                continue
-            if chunk not in best_online or sim > best_online[chunk]["similarity"]:
-                best_online[chunk] = {
-                    "matchedText": chunk,
-                    "similarity": sim,
-                    "sourceType": "external",
-                    "sourceId": match.get("url"),
+            # Process online matches
+            for match in online:
+                chunk = match.get("chunkText")
+                sim = match.get("semantic_sim", match.get("exact_sim", 0.0))
+                if not chunk:
+                    continue
+                if chunk not in best_online or sim > best_online[chunk]["similarity"]:
+                    best_online[chunk] = {
+                        "matchedText": chunk,
+                        "similarity": sim,
+                        "sourceType": "external",
+                        "sourceId": match.get("url"),
+                    }
+
+            # Process internal database matches
+            for match in database:
+                chunk = match.get("chunkText")
+                sim = match.get("similarity", 0.0)
+                if not chunk:
+                    continue
+                if (
+                    chunk not in best_database
+                    or sim > best_database[chunk]["similarity"]
+                ):
+                    best_database[chunk] = {
+                        "matchedText": chunk,
+                        "similarity": sim,
+                        "sourceType": "internal",
+                        "sourceId": str(match.get("neighborMaterialId")),
+                    }
+
+            # Combine best match results
+            matched_sources = []
+            for chunk in all_chunks:
+                onl = best_online.get(chunk)
+                db = best_database.get(chunk)
+
+                if onl and db:
+                    best = onl if onl["similarity"] >= db["similarity"] else db
+                elif onl:
+                    best = onl
+                elif db:
+                    best = db
+                else:
+                    best = {
+                        "matchedText": chunk,
+                        "similarity": 0.0,
+                        "sourceType": None,
+                        "sourceId": None,
+                    }
+
+                matched_sources.append(best)
+
+            # Calculate average similarity score
+            similarity_score = (
+                float(np.mean([m["similarity"] for m in matched_sources]))
+                if matched_sources
+                else 0.0
+            )
+
+            # Build report object for this file
+            files_result.append(
+                {
+                    "materialId": mid,
+                    "fileName": title,
+                    "similarityScore": round(similarity_score, 4),
+                    "matchedSources": matched_sources,
+                    "reportDetails": f"Matched {sum(1 for m in matched_sources if m['similarity'] > 0)}/{len(all_chunks)} chunks",
                 }
+            )
 
-        # Best DATABASE match
-        best_database = {}
-        for match in results["database"]:
-            chunk = match.get("chunkText")
-            sim = match.get("similarity", 0.0)
-            if not chunk:
-                continue
-            if chunk not in best_database or sim > best_database[chunk]["similarity"]:
-                best_database[chunk] = {
-                    "matchedText": chunk,
-                    "similarity": sim,
-                    "sourceType": "internal",
-                    "sourceId": str(match.get("neighborMaterialId")),
-                }
-
-        # Merge best results per chunk
-        matched_sources = []
-        matched_count = 0
-
-        for chunk in all_chunks:
-            onl = best_online.get(chunk)
-            db = best_database.get(chunk)
-
-            if onl and db:
-                best = onl if onl["similarity"] >= db["similarity"] else db
-            elif onl:
-                best = onl
-            elif db:
-                best = db
-            else:
-                best = {
-                    "matchedText": chunk,
-                    "similarity": 0.0,
-                    "sourceType": None,
-                    "sourceId": None,
-                }
-
-            if best["similarity"] > 0:
-                matched_count += 1
-
-            matched_sources.append(best)
-
-        # Compute overall similarity score
-        similarity_score = (
-            float(np.mean([m["similarity"] for m in matched_sources]))
-            if matched_sources
-            else 0.0
-        )
-
-        report_details = f"Matched {matched_count}/{len(all_chunks)} chunks"
-
+        # Return combined report for the entire submission
         response = {
             "success": True,
-            "materialId": material_ids,
             "submissionId": submission_id,
-            "similarityScore": round(similarity_score, 4),
-            "matchedSources": matched_sources,
-            "reportDetails": report_details,
+            "files": files_result,
         }
 
         return jsonify(response)
@@ -1227,6 +1228,7 @@ def check_plagiarism(submission_id):
     except Exception as e:
         print(f"[ERROR /check_plagiarism] {e}")
         return jsonify({"success": False, "message": str(e)}), 500
+
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
