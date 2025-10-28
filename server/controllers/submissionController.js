@@ -111,8 +111,6 @@ export const uploadSubmissionController = async (req, res) => {
           }
         );
 
-        console.log("Flask processed material:", response.data);
-
         if (response.data?._id) {
           materialDocs.push(response.data._id);
         } else if (response.data?.id) {
@@ -139,13 +137,13 @@ export const uploadSubmissionController = async (req, res) => {
 
     // create submission
     const submission = new submissionModel({
-            student: req.user._id,
-            assignment: id,
-            materials: materialDocs.map(m => m),
-            contentHash,
-            isLate,
-            status,
-            lateDuration
+      student: req.user._id,
+      assignment: id,
+      materials: materialDocs.map(m => m),
+      contentHash,
+      isLate,
+      status,
+      lateDuration
     });
 
     await submission.save();
@@ -280,7 +278,6 @@ export const updateSubmissionController = async (req, res) => {
     }
   }
 
-
   // upload the new file to S3
   const newMaterialIds = [];
   let combinedHash = crypto.createHash("sha256");
@@ -384,7 +381,7 @@ export const getAllSubmissionController = async (req, res) => {
     const submissions = await submissionModel.find({ assignment: id })
       .populate("assignment")
       .populate("student")
-      
+
     let materials = [];
     for (const sub of submissions) {
       const subId = sub._id.toString();
@@ -417,11 +414,11 @@ export const getAllSubmissionController = async (req, res) => {
       message: "Get all submissions successfully",
       submissions: submissionsWithMaterials,
     });
-    } catch (error) {
-        console.log("Error in get all submissions: ", error);
-        return res.status(500).send({
-            success: false,
-            message: "Internal server error"
+  } catch (error) {
+    console.log("Error in get all submissions: ", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error"
     });
   }
 };
@@ -442,29 +439,29 @@ export const getSubmissionController = async (req, res) => {
       .populate("assignment")
       .populate("student");
 
-      if (!submission) {
-        return res.status(404).send({
-          success: false,
-          message: "Submission not found",
-        });
-      }
+    if (!submission) {
+      return res.status(404).send({
+        success: false,
+        message: "Submission not found",
+      });
+    }
 
-      let materials = [];
-      try {
-        const flaskRes = await axios.get(
-          `http://localhost:5000/get_materials_by_submission/${submission._id.toString()}`
-        );
-        materials = flaskRes.data.materials || [];
-      } catch (error) {
-        console.error(
-          "Error fetching materials from Flask:",
-          error.response?.data || error.message
-        );
-      }
-      const submissions = {
-        ...submission.toObject(),
-        materials,
-      };
+    let materials = [];
+    try {
+      const flaskRes = await axios.get(
+        `http://localhost:5000/get_materials_by_submission/${submission._id.toString()}`
+      );
+      materials = flaskRes.data.materials || [];
+    } catch (error) {
+      console.error(
+        "Error fetching materials from Flask:",
+        error.response?.data || error.message
+      );
+    }
+    const submissions = {
+      ...submission.toObject(),
+      materials,
+    };
 
     // fetch submissions from blockchain
     let blockchainSubmissions = [];

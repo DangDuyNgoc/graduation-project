@@ -2,7 +2,7 @@ import { useParams } from "react-router-dom";
 import api from "@/utils/axiosInstance";
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { LoaderCircle, FileUp, Paperclip, FileText } from "lucide-react";
+import { LoaderCircle, FileUp, Paperclip, FileText, Trash } from "lucide-react";
 
 import DashboardLayout from "@/layout/Dashboard";
 import { Button } from "../ui/button";
@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import PlagiarismReport from "../PlagiarismReport/PlagiarismReport ";
+import BlockchainInfo from "../Blockchain/BlockchainInfo";
 
 const AssignmentDetail = () => {
   const { id } = useParams(); // assignment id
@@ -29,7 +30,7 @@ const AssignmentDetail = () => {
   const [plagiarismReport, setPlagiarismReport] = useState(null);
   const [modal, setModal] = useState(false);
 
-  const ALLOWED_SIMILARITY = 0.3;
+  const ALLOWED_SIMILARITY = 0.6;
 
   const fetchAssignments = async () => {
     setLoading(true);
@@ -113,7 +114,9 @@ const AssignmentDetail = () => {
         (file) => !prevFiles.some((f) => f.name === file.name)
       );
 
-      return [...prevFiles, ...newFiles];
+      const updatedFiles = [...prevFiles, ...newFiles];
+      console.log("Selected files:", updatedFiles);
+      return updatedFiles;
     });
   };
 
@@ -128,8 +131,9 @@ const AssignmentDetail = () => {
       const newFiles = files.filter(
         (file) => !prevFiles.some((f) => f.name === file.name)
       );
-
-      return [...prevFiles, ...newFiles];
+      const updatedFiles = [...prevFiles, ...newFiles];
+      console.log("Selected files:", updatedFiles);
+      return updatedFiles;
     });
   };
 
@@ -137,20 +141,13 @@ const AssignmentDetail = () => {
     if (!selectedFile) return toast.error("Please select a file first!");
     setIsSubmitting(true);
 
-    if (
-      plagiarismReport &&
-      plagiarismReport.similarityScore > ALLOWED_SIMILARITY
-    ) {
-      setModal(true);
-      return;
-    }
-
     try {
       const formData = new FormData();
       selectedFile.forEach((file) => {
         formData.append("fileUrls", file);
       });
 
+      console.log("Selected files upload:", selectedFile);
       formData.append("keepOld", keepOld);
 
       const isUpdate = Boolean(submission?._id);
@@ -222,7 +219,6 @@ const AssignmentDetail = () => {
       console.log(error);
     } finally {
       setIsSubmitting(false);
-      setModal(false);
     }
   };
 
@@ -431,6 +427,7 @@ const AssignmentDetail = () => {
               </div>
             )}
 
+            {/* file upload area */}
             <div
               className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors"
               onDragOver={handleDragOver}
@@ -457,11 +454,32 @@ const AssignmentDetail = () => {
                 Select File
               </label>
               {selectedFile.length > 0 && (
-                <p className="mt-4 text-sm text-green-600 font-medium">
-                  {selectedFile?.map((file, index) => (
-                    <li key={index}>{file.name}</li>
+                <div className="mt-4 space-y-2">
+                  {selectedFile.map((file, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center space-x-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 shadow-sm"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <FileText className="text-blue-500 w-4 h-4" />
+                        <span className="text-gray-700 text-sm">
+                          {file.name}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedFile((prev) =>
+                            prev.filter((_, i) => i !== index)
+                          )
+                        }
+                        className="text-red-500 cursor-pointer hover:text-red-700 text-sm font-medium"
+                      >
+                        <span> X Remove</span>
+                      </button>
+                    </div>
                   ))}
-                </p>
+                </div>
               )}
             </div>
 
@@ -494,8 +512,11 @@ const AssignmentDetail = () => {
               />
             )}
 
+            {/* Blockchain card */}
+            {submission && <BlockchainInfo submission={submission} />}
+
             {/* Modal */}
-            {plagiarismReport && (
+            {modal && plagiarismReport && (
               <AlertDialog open={modal} onOpenChange={setModal}>
                 <AlertDialogContent>
                   <AlertDialogHeader>

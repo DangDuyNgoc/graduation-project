@@ -40,6 +40,10 @@ export const checkPlagiarismController = async (req, res) => {
     }
 
     const materialId = data.materialId;
+    const similarityScore = data.similarityScore;
+
+    submission.plagiarismScore = similarityScore;
+    await submission.save();
     // Prepare mapped sources for DB
     const mappedSources = data.matchedSources.map((s) => ({
       sourceType: s.sourceType,
@@ -99,6 +103,14 @@ export const getPlagiarismReportController = async (req, res) => {
       return res.status(400).send({
         success: false,
         message: "SubmissionId is required"
+      });
+    }
+
+    const submission = await submissionModel.findById(submissionId);
+    if (!submission) {
+      return res.status(404).send({
+        success: false,
+        message: "Submission not found"
       });
     }
 

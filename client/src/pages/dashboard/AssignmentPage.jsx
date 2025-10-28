@@ -140,10 +140,10 @@ const AssignmentPage = () => {
 
                   return (
                     <tr key={a.assignmentId} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                      <td className="truncate max-w-[150px] px-6 py-4 text-sm font-medium text-gray-900">
                         {a.title}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
+                      <td className="truncate max-w-[150px] px-6 py-4 text-sm text-gray-600">
                         {a.courseName || "—"}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">

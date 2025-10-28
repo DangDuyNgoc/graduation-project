@@ -1,11 +1,14 @@
 import React from "react";
 import { Button } from "../ui/button";
-function PlagiarismReport({ report, onCheck, threshold = 0.3 }) {
+function PlagiarismReport({ report, onCheck, threshold }) {
   if (!report) return;
 
   const similarityPercent = (report.similarityScore * 100).toFixed(2);
   const isOverThreshold = report.similarityScore > threshold;
   const scoreColor = isOverThreshold ? "text-red-600" : "text-green-600";
+  const hightMatches = report.matchedSources.filter(
+    (s) => s.similarity > threshold
+  );
   return (
     <div className="bg-white shadow-md rounded-lg p-6 mt-6">
       <h2>Plagiarism Report</h2>
@@ -19,17 +22,32 @@ function PlagiarismReport({ report, onCheck, threshold = 0.3 }) {
       <div className="border-t pt-4">
         <h3 className="text-lg font-semibold mb-3">
           Matched Sources
-          {report.matchedSources.length > 0 ? (
+          {hightMatches.length > 0 ? (
             <ul className="space-y-3">
-              {report.matchedSources.map((source, index) => (
+              {hightMatches.map((source, index) => (
                 <li
                   key={index}
                   className="border rounded-md p-3 bg-gray-50 text-sm"
                 >
-                  <p className="text-gray-600 mb-2">Source Type: </p>
+                  <span className="text-gray-600 mb-4">Source Type: </span>
                   <span>{source.sourceType}</span>
+                  {source.sourceType === "external" && source.sourceId && (
+                    <p className="text-gray-600 mb-2">
+                      <span className="font-semibold text-gray-600">
+                        Source URL:
+                      </span>{" "}
+                      <a
+                        href={source.sourceId}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline break-all"
+                      >
+                        {source.sourceId}
+                      </a>
+                    </p>
+                  )}
                   <p>
-                    <span className="font-semibold text-blue-600">
+                    <span className="font-semibold text-gray-600">
                       Matched Text:
                     </span>
                     <span className="bg-yellow-200 text-gray-900 ml-2 px-1 rounded">
