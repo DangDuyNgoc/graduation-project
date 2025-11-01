@@ -71,7 +71,7 @@ export const createAssignmentController = async (req, res) => {
             title,
             description,
             dueDate,
-            allowLateSubmission: !!allowLateSubmission,
+            allowLateSubmission: allowLateSubmission === "true",
             lateSubmissionDuration: validLateDuration,
             materials
         });
@@ -328,7 +328,7 @@ export const updateAssignmentController = async (req, res) => {
         if (dueDate) updateData.dueDate = dueDate;
 
         if (allowLateSubmission !== undefined) {
-            updateData.allowLateSubmission = !!allowLateSubmission;
+            updateData.allowLateSubmission = allowLateSubmission === "true";
 
             if (updateData.allowLateSubmission) {
                 const durationInMinutes = parseInt(lateSubmissionDuration) || 60;

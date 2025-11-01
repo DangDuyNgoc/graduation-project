@@ -4,31 +4,50 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import api from "@/utils/axiosInstance";
-import { FileUp, Image as ImageIcon, LoaderCircle, Plus } from "lucide-react";
-import { useState } from "react";
+import { Image as ImageIcon, LoaderCircle, Plus, Pencil } from "lucide-react";
+import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
+import FileUploadZone from "../Common/FileUploadZone";
+import { createCourse, updateCourse } from "@/api/courseApi";
 
-export default function CourseDialog({ onCreated }) {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-  });
+export default function CourseDialog({
+  onCreated,
+  onUpdated,
+  course = null,
+  open,
+  onOpenChange,
+}) {
+  const [form, setForm] = useState({ name: "", description: "" });
   const [materials, setMaterials] = useState([]);
   const [thumbnail, setThumbnail] = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (course) {
+      setForm({
+        name: course.name || "",
+        description: course.description || "",
+      });
+      setPreview(course.thumbnail?.url || null);
+      setMaterials(
+        course.materials?.map((m) => ({
+          name: m.title,
+          url: m.url,
+          existing: true,
+        })) || []
+      );
+    } else {
+      setForm({ name: "", description: "" });
+      setPreview(null);
+      setMaterials([]);
+    }
+  }, [course, open]);
+
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  const handleFileChange = (e) => {
-    setMaterials(Array.from(e.target.files));
   };
 
   const handleThumbnailChange = (e) => {
@@ -39,7 +58,6 @@ export default function CourseDialog({ onCreated }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!form.name.trim()) return toast.error("Course name is required!");
 
     const formData = new FormData();
@@ -50,54 +68,45 @@ export default function CourseDialog({ onCreated }) {
 
     try {
       setLoading(true);
-      const { data } = await api.post("/course/create-course", formData, {
-        withCredentials: true,
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const data = course
+        ? await updateCourse(course._id, formData)
+        : await createCourse(formData);
 
       if (data.success) {
-        toast.success("Course created successfully!");
-        onCreated && onCreated();
-        setOpen(false);
-        setForm({ name: "", description: "" });
-        setMaterials([]);
-        setThumbnail(null);
-        setPreview(null);
+        toast.success(
+          course
+            ? "Course updated successfully!"
+            : "Course created successfully!"
+        );
+        if (course) onUpdated && onUpdated();
+        else onCreated && onCreated();
+        onOpenChange?.(false);
       } else {
-        toast.error(data.message || "Failed to create course.");
+        toast.error(data.message || "Operation failed!");
       }
     } catch (error) {
       console.error(error);
-      toast.error("Error creating course!");
+      toast.error("Error processing request!");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="flex items-center gap-2">
-          <Plus className="size-4" /> Add Course
-        </Button>
-      </DialogTrigger>
-
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg w-full max-w-[500px] max-h-[100vh] overflow-y-auto overflow-x-hidden rounded-xl">
         <DialogHeader>
-          <DialogTitle>Create New Course</DialogTitle>
+          <DialogTitle>
+            {course ? "Update Course" : "Create New Course"}
+          </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Course Name */}
           <div className="space-y-1">
-            <label
-              htmlFor="name"
-              className="text-sm font-medium text-gray-700 mb-1 block"
-            >
+            <label className="text-sm font-medium text-gray-700 mb-1 block">
               Course Name
             </label>
             <Input
-              id="name"
               name="name"
               value={form.name}
               onChange={handleChange}
@@ -106,16 +115,11 @@ export default function CourseDialog({ onCreated }) {
             />
           </div>
 
-          {/* Description */}
           <div className="space-y-1">
-            <label
-              htmlFor="description"
-              className="text-sm font-medium text-gray-700 mb-1 block"
-            >
+            <label className="text-sm font-medium text-gray-700 mb-1 block">
               Description
             </label>
             <textarea
-              id="description"
               name="description"
               value={form.description}
               onChange={handleChange}
@@ -125,12 +129,8 @@ export default function CourseDialog({ onCreated }) {
             />
           </div>
 
-          {/* Thumbnail Upload */}
           <div className="space-y-1">
-            <label
-              htmlFor="thumbnail"
-              className="text-sm font-medium text-gray-700 mb-1 block"
-            >
+            <label className="text-sm font-medium text-gray-700 mb-1 block">
               Thumbnail
             </label>
             <div className="flex items-center gap-4">
@@ -151,50 +151,26 @@ export default function CourseDialog({ onCreated }) {
                 <img
                   src={preview}
                   alt="Thumbnail Preview"
-                  className="w-16 h-16 rounded object-cover border"
+                  className="w-10 h-10 rounded object-cover border"
                 />
               )}
             </div>
           </div>
 
-          {/* Materials Upload */}
-          <div className="space-y-1">
-            <label
-              htmlFor="materials"
-              className="text-sm font-medium text-gray-700 mb-1 block"
-            >
-              Materials
-            </label>
-            <div className="flex items-center gap-4">
-              <label
-                htmlFor="materials"
-                className="flex items-center gap-2 cursor-pointer bg-gray-100 hover:bg-gray-200 border px-3 py-2 rounded-md text-sm"
-              >
-                <FileUp className="size-4" /> Upload Files
-              </label>
-              <input
-                id="materials"
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <span className="text-sm text-gray-500">
-                {materials.length > 0
-                  ? `${materials.length} file(s) selected`
-                  : "No files chosen"}
-              </span>
-            </div>
-          </div>
+          <FileUploadZone
+            onFilesChange={setMaterials}
+            initialFiles={materials}
+          />
 
-          {/* Submit Button */}
           <div className="pt-2 text-right">
             <Button type="submit" disabled={loading}>
               {loading ? (
                 <>
                   <LoaderCircle className="animate-spin size-4 mr-2" />
-                  Creating...
+                  {course ? "Updating..." : "Creating..."}
                 </>
+              ) : course ? (
+                "Update Course"
               ) : (
                 "Create Course"
               )}

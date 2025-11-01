@@ -1,33 +1,36 @@
 import { deleteCourse, getTeacherCourses } from "@/api/courseApi";
 import DeleteDialog from "@/components/Common/DeleteDialog";
+import LoadingSpinner from "@/components/Common/LoadingSpinner";
 import CourseDialog from "@/components/Courses/CourseDialog";
 import { Button } from "@/components/ui/button";
 import DashboardLayout from "@/layout/Dashboard";
-import { LoaderCircle, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 
 function TeacherCoursePage() {
   const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [deleting, setDeleting] = useState(false);
 
   const navigate = useNavigate();
 
-  const fetchCourses = async () => {
+  const fetchCourses = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getTeacherCourses();
       setCourses(data.course || []);
     } catch (error) {
       console.error("Failed to fetch courses:", error);
+      toast.error("Failed to load courses!");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleDelete = async () => {
     if (!selectedCourse) return;
@@ -36,7 +39,7 @@ function TeacherCoursePage() {
       await deleteCourse(selectedCourse._id);
       toast.success("Course deleted successfully!");
       setDeleteOpen(false);
-      fetchCourses();
+      await fetchCourses();
     } catch {
       toast.error("Failed to delete course!");
     } finally {
@@ -46,27 +49,39 @@ function TeacherCoursePage() {
 
   useEffect(() => {
     fetchCourses();
-  }, []);
+  }, [fetchCourses]);
 
   return (
     <DashboardLayout>
-      <div className="flex justify-between">
-        <div className="mb-2">
+      <CourseDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onCreated={fetchCourses}
+        onUpdated={fetchCourses}
+        course={selectedCourse}
+      />
+
+      <div className="flex justify-between items-center mb-6">
+        <div>
           <h1 className="text-2xl font-semibold">Courses</h1>
-          <p className="text-gray-600 text-sm mb-6">
+          <p className="text-gray-600 text-sm">
             Manage and track your course progress.
           </p>
         </div>
 
-        <div className="mb-2">
-          <CourseDialog onCreated={fetchCourses} />
-        </div>
+        <Button
+          onClick={() => {
+            setSelectedCourse(null);
+            setDialogOpen(true);
+          }}
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          Add Course
+        </Button>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-10">
-          <LoaderCircle className="size-8 animate-spin text-primary" />
-        </div>
+        <LoadingSpinner text="Loading..." className="py-20" />
       ) : courses.length === 0 ? (
         <p className="text-center text-gray-500 mt-10">No courses available.</p>
       ) : (
@@ -82,12 +97,14 @@ function TeacherCoursePage() {
                   src={course.thumbnail?.url || "https://placehold.co/600x400"}
                   alt={course.name}
                   className="rounded-t-xl w-full h-40 object-cover cursor-pointer"
-                  onClick={() => navigate(`/course/${course._id}`)}
+                  onClick={() => navigate(`/teacher-assignment/${course._id}`)}
                 />
                 <div className="p-4 flex-1 flex flex-col">
                   <h2
                     className="text-lg font-semibold text-gray-800 mb-1 cursor-pointer"
-                    onClick={() => navigate(`/teacher-assignment/${course._id}`)}
+                    onClick={() =>
+                      navigate(`/teacher-assignment/${course._id}`)
+                    }
                   >
                     {course.name}
                   </h2>
@@ -100,15 +117,18 @@ function TeacherCoursePage() {
                   <div className="mt-auto flex justify-between">
                     <Button
                       variant="link"
-                      className="p-0 text-blue-600 hover:text-blue-800 cursor-pointer"
-                      onClick={() => navigate(`/course/${course._id}`)}
+                      className="p-0 text-blue-600 hover:text-blue-800"
+                      onClick={() => {
+                        setSelectedCourse(course);
+                        setDialogOpen(true);
+                      }}
                     >
                       Update course
                     </Button>
 
                     <Button
                       variant="link"
-                      className="p-0 text-red-600 hover:text-red-800 cursor-pointer"
+                      className="p-0 text-red-600 hover:text-red-800"
                       onClick={() => {
                         setSelectedCourse(course);
                         setDeleteOpen(true);

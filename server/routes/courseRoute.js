@@ -8,6 +8,8 @@ import {
     deleteCourseMaterialsController,
     deleteOneCourseMaterialController,
     getAllCourseController,
+    getAllInfoStudentByCourseIdController,
+    getAllInfoStudentController,
     getCourseByIdController,
     getCoursesByTeacherId,
     removeStudentsFromCourseController,
@@ -31,6 +33,18 @@ courseRoute.get(
   isAuthenticated,
   isTeacher,
   getCoursesByTeacherId
+);
+courseRoute.get(
+  "/get-students-teacher-courses/:id",
+  isAuthenticated,
+  isTeacher,
+  getAllInfoStudentByCourseIdController
+);
+courseRoute.get(
+  "/get-all-students/teacher-course",
+  isAuthenticated,
+  isTeacher,
+  getAllInfoStudentController
 );
 courseRoute.put(
     "/update-course/:id",

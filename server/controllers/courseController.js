@@ -239,6 +239,107 @@ export const getCoursesByTeacherId =  async(req, res) => {
   }
 }
 
+// get all information of student by course id
+export const getAllInfoStudentByCourseIdController = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const course = await courseModel
+      .findById(id)
+      .populate({
+        path: "studentIds",
+        model: userModel,
+        select: "name email phone avatar _id",
+        // match: { role: "STUDENT" },
+      })
+      .select("studentIds name _id");
+
+    if (!course || !course.studentIds || course.studentIds.length === 0) {
+      return res.status(404).send({
+        success: false,
+        message: "No students found for this course.",
+      });
+    }
+
+    res.status(200).send({
+      success: true,
+      message: "Fetched all students successfully.",
+      students: course.studentIds,
+    });
+  } catch (error) {
+    console.error("Error fetching students:", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error.",
+      error: error.message,
+    });
+  }
+};
+
+// get all information of students have not in course
+export const getAllInfoStudentController = async (req, res) => {
+  try {
+    const { courseId } = req.query;
+    const search = req.query.search?.trim() || "";
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 15;
+
+    const query = { role: "STUDENT" };
+
+    if (courseId) {
+      const course = await courseModel.findById(courseId).select("studentIds");
+      if (!course) {
+        return res.status(404).send({
+          success: false,
+          message: "Course not found",
+        });
+      }
+      query._id = { $nin: course.studentIds };
+    }
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const total = await userModel.countDocuments(query);
+
+    const students = await userModel
+      .find(query)
+      .select("_id name email phone")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    if (students.length === 0) {
+      return res.status(404).send({
+        success: false,
+        message: "No students found",
+      });
+    }
+
+    res.status(200).send({
+      success: true,
+      message: "Fetched all students successfully",
+      students,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Get all students error:", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
 export const getAllCourseController = async (req, res) => {
     try {
         const courses = await courseModel.find({})
