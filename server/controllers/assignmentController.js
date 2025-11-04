@@ -4,6 +4,7 @@ import courseModel from "../models/courseModel.js";
 import submissionModel from "../models/submissionModel.js";
 import { deleteObjects, deleteOneObject } from "../utils/deleteObject.js";
 import { putObject } from "../utils/putObject.js";
+import PlagiarismReportModel from "../models/PlagiarismReport.js";
 
 export const createAssignmentController = async (req, res) => {
     try {
@@ -70,7 +71,7 @@ export const createAssignmentController = async (req, res) => {
             title,
             description,
             dueDate,
-            allowLateSubmission: !!allowLateSubmission,
+            allowLateSubmission: allowLateSubmission === "true",
             lateSubmissionDuration: validLateDuration,
             materials
         });
@@ -327,7 +328,7 @@ export const updateAssignmentController = async (req, res) => {
         if (dueDate) updateData.dueDate = dueDate;
 
         if (allowLateSubmission !== undefined) {
-            updateData.allowLateSubmission = !!allowLateSubmission;
+            updateData.allowLateSubmission = allowLateSubmission === "true";
 
             if (updateData.allowLateSubmission) {
                 const durationInMinutes = parseInt(lateSubmissionDuration) || 60;
@@ -447,6 +448,9 @@ export const deleteAssignmentController = async (req, res) => {
         }
 
         // delete submissions and assignment
+        await PlagiarismReportModel.deleteMany({
+          submissionId: { $in: submissions.map((s) => s._id) },
+        });
         await submissionModel.deleteMany({ assignment: id });
         await assignmentModel.findByIdAndDelete(id);
 
@@ -605,6 +609,9 @@ export const deleteAllAssignmentController = async (req, res) => {
         if (s3Keys.length > 0) {
             await deleteObjects(s3Keys);
         };
+
+        // delete related plagiarismReport
+        await PlagiarismReportModel.deleteMany({});
 
         // delete related submission
         await submissionModel.deleteMany({});

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, FileText, Upload, User, Users } from "lucide-react";
+import { Home, FileText, Upload, User, Users, GraduationCap } from "lucide-react";
 import api from "@/utils/axiosInstance";
 
 const Sidebar = () => {
@@ -26,6 +26,11 @@ const Sidebar = () => {
       name: "Dashboard",
       path: "/dashboard",
       icon: <Home className="size-4" />,
+    },
+    {
+      name: "Courses",
+      path: "/teacher-courses",
+      icon: <GraduationCap className="size-4" />,
     },
     {
       name: "Assignments",

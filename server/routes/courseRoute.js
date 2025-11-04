@@ -8,7 +8,10 @@ import {
     deleteCourseMaterialsController,
     deleteOneCourseMaterialController,
     getAllCourseController,
+    getAllInfoStudentByCourseIdController,
+    getAllInfoStudentController,
     getCourseByIdController,
+    getCoursesByTeacherId,
     removeStudentsFromCourseController,
     updateCourseController
 } from "../controllers/courseController.js";
@@ -25,6 +28,24 @@ courseRoute.post(
 );
 courseRoute.get("/get-all-courses", getAllCourseController);
 courseRoute.get("/get-course/:id", isAuthenticated, getCourseByIdController);
+courseRoute.get(
+  "/get-teacher-courses",
+  isAuthenticated,
+  isTeacher,
+  getCoursesByTeacherId
+);
+courseRoute.get(
+  "/get-students-teacher-courses/:id",
+  isAuthenticated,
+  isTeacher,
+  getAllInfoStudentByCourseIdController
+);
+courseRoute.get(
+  "/get-all-students/teacher-course",
+  isAuthenticated,
+  isTeacher,
+  getAllInfoStudentController
+);
 courseRoute.put(
     "/update-course/:id",
     isAuthenticated,

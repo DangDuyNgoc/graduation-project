@@ -38,8 +38,6 @@ export const checkPlagiarismController = async (req, res) => {
         message: "Flask analysis failed",
       });
     }
-
-    const materialId = data.materialId;
     const similarityScore = data.similarityScore;
 
     submission.plagiarismScore = similarityScore;
@@ -59,10 +57,6 @@ export const checkPlagiarismController = async (req, res) => {
       // Update existing report
       existingReport.similarityScore = data.similarityScore;
       existingReport.matchedSources = mappedSources;
-      existingReport.reportDetails = {
-        materialId,
-        totalSources: mappedSources.length,
-      };
 
       await existingReport.save();
 
@@ -77,10 +71,6 @@ export const checkPlagiarismController = async (req, res) => {
         submissionId,
         similarityScore: data.similarityScore,
         matchedSources: mappedSources,
-        reportDetails: {
-          materialId,
-          totalSources: mappedSources.length,
-        },
       });
 
       return res.status(200).json({

@@ -19,7 +19,13 @@ import SubmissionsPage from "./pages/dashboard/SubmissionsPage";
 import ProfilePage from "./pages/dashboard/ProfilePage";
 import TeachersPage from "./pages/dashboard/TeachersPage";
 import PlagiarismReport from "./components/PlagiarismReport/PlagiarismReport";
-// import ProtectedRoute from "./route/ProtectedRoute";
+import ProtectedRoute from "./route/ProtectedRoute";
+import TeacherCoursePage from "./pages/dashboard/TeacherCoursePage";
+import TeacherAssignmentPage from "./pages/dashboard/TeacherAssignmentPage";
+import TeachersSubmissionPage from "./pages/dashboard/TeachersSubmisionPage";
+import TeacherSubmissionStudentPage from "./pages/dashboard/TeacherSubmissionStudentPage";
+import TeacherEnrolledStudent from "./pages/dashboard/TeacherEnrolledStudent";
+import TeacherEnrolStudent from "./pages/dashboard/TeacherEnrolStudent";
 
 const root = createBrowserRouter([
   {
@@ -61,14 +67,54 @@ const root = createBrowserRouter([
         path: "/plagiarism-report/:id",
         element: <PlagiarismReport />,
       },
-      // {
-      //   path: "/course/:id",
-      //   element: (
-      //     <ProtectedRoute allowedRoles={["STUDENT", "TEACHER"]}>
-      //       <CourseDetail />
-      //     </ProtectedRoute>
-      //   ),
-      // },
+      {
+        path: "/teacher-courses",
+        element: (
+          <ProtectedRoute allowedRoles={["TEACHER"]}>
+            <TeacherCoursePage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/teacher-assignment/:id",
+        element: (
+          <ProtectedRoute allowedRoles={["TEACHER"]}>
+            <TeacherAssignmentPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/teacher-submissions/:id",
+        element: (
+          <ProtectedRoute allowedRoles={["TEACHER"]}>
+            <TeachersSubmissionPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/teacher-submissions-student/:id",
+        element: (
+          <ProtectedRoute allowedRoles={["TEACHER"]}>
+            <TeacherSubmissionStudentPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/teacher-enrolled-student/:id",
+        element: (
+          <ProtectedRoute allowedRoles={["TEACHER"]}>
+            <TeacherEnrolledStudent />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/teacher-enroll-student/:id",
+        element: (
+          <ProtectedRoute allowedRoles={["TEACHER"]}>
+            <TeacherEnrolStudent />
+          </ProtectedRoute>
+        ),
+      },
     ],
   },
   {
