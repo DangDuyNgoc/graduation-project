@@ -1,9 +1,11 @@
+import ChatFrame from "@/components/Chat/ChatFrame";
 import SearchBar from "@/components/Common/SearchBar";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
-import { LoaderCircle, Search } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import React, { useState, useEffect } from "react";
 
 function TeachersPage() {
@@ -11,6 +13,7 @@ function TeachersPage() {
   const [loading, setLoading] = useState(false);
   const [filteredTeachers, setFilteredTeachers] = useState([]);
   const [search, setSearch] = useState("");
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
 
   const fetchTeachers = async () => {
     setLoading(true);
@@ -43,6 +46,10 @@ function TeachersPage() {
 
     setFilteredTeachers(filtered);
   }, [search, teachers]);
+
+  const handleContact = (teacher) => {
+    setSelectedTeacher(teacher);
+  };
 
   return (
     <DashboardLayout>
@@ -90,6 +97,20 @@ function TeachersPage() {
                       Phone: {teacher.phone || "No phone number"}
                     </p>
                   </div>
+                  <Button
+                    className="w-full"
+                    onClick={() => handleContact(teacher)}
+                  >
+                    Contact
+                  </Button>
+
+                  {selectedTeacher && (
+                    <ChatFrame
+                      isOpen={true}
+                      teacher={selectedTeacher}
+                      onClose={() => setSelectedTeacher(null)}
+                    />
+                  )}
                 </div>
               ))
             ) : (

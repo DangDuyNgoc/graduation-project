@@ -1,4 +1,4 @@
-import conversationModel from "../models/conversationModel";
+import conversationModel from "../models/conversationModel.js";
 
 export const createOrGetConversation = async (req, res) => {
     try {
@@ -60,3 +60,38 @@ export const createOrGetConversation = async (req, res) => {
         });
     };
 };
+
+// get all conversations of user
+export const getUserConversations = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const conversations = await conversationModel.find({
+            participants: userId
+        })
+            .populate("participants", "name email role")
+            .sort({ updatedAt: -1 })
+
+        return res.status(200).send({
+            success: true,
+            message: "Get user conversations successfully",
+            conversations
+        })
+    } catch (error) {
+        console.log("Error in get user conversations: ", error);
+        return res.status(500).send({
+            success: true,
+            message: "Internal server error"
+        })
+    }
+};
+
+export const updateLastMessage = async (conversationId, text, attachments) => {
+    try {
+        await conversationModel.findByIdAndUpdate(conversationId, {
+            lastMessage: text || (attachments?.length ? "attached files" : ""),
+            lastMessageAt: new Date(),
+        })
+    } catch (error) {
+        console.log("Error in update message: ", error);
+    }
+}

@@ -1,0 +1,79 @@
+import { getMessageModel } from "../helper/getMessageModel.js";
+import { putObject } from "../utils/putObject.js";
+import { updateLastMessage } from "./conversationController.js";
+
+export const sendMessageController = async (req, res) => {
+    try {
+        const { conversationId, senderId, text } = req.body;
+        const messageModel = getMessageModel();
+
+        // upload assignment file to s3
+        let attachments = [];
+        if (req.files && req.files.length > 0) {
+            const uploadPromises = req.files.map(async (file) => {
+                const fileName = `attachments/${Date.now()}_${file.originalname}`;
+                const { url } = await putObject(file.buffer, fileName, file.mimetype);
+
+                return {
+                    title: file.originalname,
+                    s3_url: url,
+                    key: fileName,
+                    fileType: file.mimetype,
+                    uploadAt: new Date(),
+                };
+            });
+
+            attachments = await Promise.all(uploadPromises);
+        }
+
+        const newMessage = await messageModel.create({
+            conversation: conversationId,
+            sender: senderId,
+            text,
+            attachments
+        }).then((m) => m.populate([
+            { path: "sender", select: "name email role avatar" },
+            { path: "attachments", select: "tile s3_url key fileType uploadAt" }
+        ]));
+
+        await updateLastMessage(conversationId, text, attachments);
+
+        // emit realtime
+
+        res.status(200).send({
+            success: true,
+            message: "Send message successfully",
+            newMessage
+        });
+    } catch (error) {
+        console.log("Error in send message: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        })
+    }
+};
+
+// get all messages in one conversation
+export const getMessageByConversationController = async (req, res) => {
+    try {
+        const { conversationId } = req.params;
+        const messageModel = getMessageModel();
+
+        const messages = await messageModel.find({ conversation: conversationId })
+            .populate("sender", "name email role")
+            .sort({ createdAt: -1 })
+
+        res.status(200).send({
+            success: true,
+            message: "get message successfully",
+            messages
+        })
+    } catch (error) {
+        console.log("Error in get message: ", error);
+        return res.status(500).send({
+            success: true,
+            message: "Internal server error"
+        })
+    }
+};

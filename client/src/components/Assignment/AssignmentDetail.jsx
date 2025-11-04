@@ -1,8 +1,8 @@
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import api from "@/utils/axiosInstance";
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { LoaderCircle, FileUp, Paperclip, FileText, Trash } from "lucide-react";
+import { LoaderCircle, FileUp, Paperclip, FileText } from "lucide-react";
 
 import DashboardLayout from "@/layout/Dashboard";
 import { Button } from "../ui/button";
@@ -16,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import PlagiarismReport from "../PlagiarismReport/PlagiarismReport ";
 import BlockchainInfo from "../Blockchain/BlockchainInfo";
 
 const AssignmentDetail = () => {
@@ -219,31 +218,6 @@ const AssignmentDetail = () => {
       console.log(error);
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleCheckPlagiarism = async (submissionId) => {
-    setLoading(true);
-    try {
-      const { data } = await api.get(
-        `/plagiarism/check-plagiarism/${submissionId}`,
-        {
-          withCredentials: true,
-        }
-      );
-      if (data.success) {
-        toast.success("Plagiarism check completed", { id: "plagiarism_check" });
-        setPlagiarismReport(data.report);
-      } else {
-        toast.error(data.message || "Plagiarism check failed", {
-          id: "plagiarism_check",
-        });
-      }
-    } catch (error) {
-      console.log(error);
-      toast.error("Failed to check plagiarism", { id: "plagiarism_check" });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -503,13 +477,13 @@ const AssignmentDetail = () => {
             </div>
 
             {plagiarismReport && (
-              <PlagiarismReport
-                report={plagiarismReport}
-                onCheck={() =>
-                  submission && handleCheckPlagiarism(submission._id)
-                }
-                threshold={ALLOWED_SIMILARITY}
-              />
+              <div>
+                <Button>
+                  <Link to={`/plagiarism-report/${submission._id}`}>
+                    View Plagiarism Report
+                  </Link>
+                </Button>
+              </div>
             )}
 
             {/* Blockchain card */}
@@ -534,8 +508,10 @@ const AssignmentDetail = () => {
                     <AlertDialogCancel onClick={() => setModal(false)}>
                       Cancel
                     </AlertDialogCancel>
-                    <AlertDialogAction onClick={handleSubmit}>
-                      Submit Anyway
+                    <AlertDialogAction>
+                      <Link to={`/plagiarism-report/${submission._id}`}>
+                        View Report
+                      </Link>
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

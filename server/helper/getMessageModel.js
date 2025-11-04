@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
-import messageSchema from "../models/MessageModel";
+import messageSchema from "../models/MessageModel.js";
 
 export const getMessageModel = (year, month) => {
     const now = new Date();
     const y = year || now.getFullYear();
-    const m = month || String((now.getMonth() + 1).padStart(2, "0"));
+    const m = month || String(now.getMonth() + 1).padStart(2, "0");
 
     const collectionName = `message_${y}_${m}`;
 

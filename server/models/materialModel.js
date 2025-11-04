@@ -1,19 +1,6 @@
 import mongoose from "mongoose";
 
 const materialsSchema = new mongoose.Schema({
-    courseId: {
-        type: mongoose.Types.ObjectId,
-        ref: "course",
-    },
-    submissionId: {
-        type: mongoose.Types.ObjectId,
-        ref: "submission",
-    },
-    ownerType: {
-        type: String,
-        enum: ["courseMaterial", "submissionMaterial"],
-        required: true
-    },
     title: {
         type: String,
     },
@@ -30,19 +17,6 @@ const materialsSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
-    processingStatus: {
-        type: String,
-        enum: ["pending", "processing", "done", "error"],
-        default: "pending"
-    },
-    chunkCount: {
-        type: Number,
-        default: 0
-    },
-    extractedTextLength: {
-        type: Number,
-        default: 0
-    }
 });
 
 const materialsModel = mongoose.model("material", materialsSchema);

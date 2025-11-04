@@ -5,6 +5,7 @@ import cors from "cors";
 import colors from "colors";
 import cookieParser from "cookie-parser";
 import { v2 as cloudinary } from 'cloudinary';
+import http from "http";
 
 import connectDB from "./config/db.js";
 import userRouter from "./routes/userRoute.js";
@@ -12,6 +13,9 @@ import courseRoute from "./routes/courseRoute.js";
 import assignmentRoute from "./routes/assignmentRoute.js";
 import submissionRoute from "./routes/submissionRoute.js";
 import plagiarismRouter from "./routes/plagiarismReportRoute.js";
+import conversationRoute from "./routes/conversationRoute.js";
+import messageRoute from "./routes/messageRoute.js";
+import { setupSocket } from "./socket/socket.js";
 
 dotenv.config();
 
@@ -45,7 +49,13 @@ app.use("/api/course", courseRoute);
 app.use("/api/assignment", assignmentRoute);
 app.use("/api/submission", submissionRoute);
 app.use("/api/plagiarism", plagiarismRouter)
+app.use("/api/conversation", conversationRoute)
+app.use("/api/message", messageRoute)
 
-app.listen(PORT, () => {
+// socket
+const server = http.createServer(app);
+setupSocket(server);
+
+server.listen(PORT, () => {
     console.log(`Server in running on ${process.env.DEV_MODE} mode on port ${PORT}`.bgCyan.white);
 })
