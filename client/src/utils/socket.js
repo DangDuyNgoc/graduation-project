@@ -5,4 +5,8 @@ const socket = io(import.meta.env.VITE_BACKEND_URL || "http://localhost:8080", {
     transports: ["websocket"],
 });
 
+socket.on("userInfo", ({ userId }) => {
+    socket.userId = userId;
+})
+
 export default socket;

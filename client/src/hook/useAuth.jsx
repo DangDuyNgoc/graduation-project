@@ -15,7 +15,7 @@ export const useAuth = () => {
 
     const fetchUserInfo = async () => {
       try {
-        const response = api.get("/user/me", { withCredentials: true });
+        const response = await api.get("/user/me", { withCredentials: true });
         if (isMounted && response.data) {
           updateUser(response.data.user);
         }

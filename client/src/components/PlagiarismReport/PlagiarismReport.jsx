@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "../ui/button";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import api from "@/utils/axiosInstance";
 import toast from "react-hot-toast";
 import { LoaderCircle } from "lucide-react";
@@ -11,6 +11,7 @@ function PlagiarismReport() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [threshold] = useState(0.6);
+  const navigate = useNavigate();
 
   const fetchReport = async () => {
     setLoading(true);
@@ -99,9 +100,10 @@ function PlagiarismReport() {
           </span>
         </p>
 
-        {isOverThreshold && (
+        {/* {isOverThreshold && (
           <Button onClick={handleCheckPlagiarism}>Check Again</Button>
-        )}
+        )} */}
+        <Button onClick={() => navigate(-1)}>Go Back</Button>
 
         <div className="border-t pt-4 space-y-6">
           {report.files.map((file, index) => {

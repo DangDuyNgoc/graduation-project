@@ -3,17 +3,20 @@ import SearchBar from "@/components/Common/SearchBar";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { UserContext } from "@/context/UserContext";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
 import { LoaderCircle } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 
 function TeachersPage() {
+  const { user } = useContext(UserContext);
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filteredTeachers, setFilteredTeachers] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [conversationId, setConversationId] = useState(null);
 
   const fetchTeachers = async () => {
     setLoading(true);
@@ -47,8 +50,21 @@ function TeachersPage() {
     setFilteredTeachers(filtered);
   }, [search, teachers]);
 
-  const handleContact = (teacher) => {
-    setSelectedTeacher(teacher);
+  const handleContact = async (teacher) => {
+    if (!user) return null;
+    try {
+      const { data } = await api.post(
+        "/conversation/create-or-get",
+        {
+          participants: [teacher._id, user._id],
+        },
+        { withCredentials: true }
+      );
+      setSelectedTeacher(teacher);
+      setConversationId(data.conversation._id);
+    } catch (error) {
+      console.error("Error creating or getting conversation:", error);
+    }
   };
 
   return (
@@ -106,9 +122,13 @@ function TeachersPage() {
 
                   {selectedTeacher && (
                     <ChatFrame
+                      conversationId={conversationId}
                       isOpen={true}
                       teacher={selectedTeacher}
-                      onClose={() => setSelectedTeacher(null)}
+                      onClose={() => {
+                        setSelectedTeacher(null);
+                        setConversationId(null);
+                      }}
                     />
                   )}
                 </div>

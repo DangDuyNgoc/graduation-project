@@ -1,4 +1,5 @@
 import { getMessageModel } from "../helper/getMessageModel.js";
+import materialsModel from "../models/materialModel.js";
 import { putObject } from "../utils/putObject.js";
 import { updateLastMessage } from "./conversationController.js";
 
@@ -14,13 +15,14 @@ export const sendMessageController = async (req, res) => {
                 const fileName = `attachments/${Date.now()}_${file.originalname}`;
                 const { url } = await putObject(file.buffer, fileName, file.mimetype);
 
-                return {
+                const material = await materialsModel.create({
                     title: file.originalname,
                     s3_url: url,
                     key: fileName,
-                    fileType: file.mimetype,
-                    uploadAt: new Date(),
-                };
+                    fileType: file.mimetype
+                });
+
+                return material._id;
             });
 
             attachments = await Promise.all(uploadPromises);
@@ -31,14 +33,14 @@ export const sendMessageController = async (req, res) => {
             sender: senderId,
             text,
             attachments
-        }).then((m) => m.populate([
-            { path: "sender", select: "name email role avatar" },
-            { path: "attachments", select: "tile s3_url key fileType uploadAt" }
-        ]));
+        });
+
+        await newMessage.populate([
+            {path: "sender", select: "name email role avatar"},
+            {path: "attachments", select: "title s3_url key fileType uploadedAt"}
+        ]);
 
         await updateLastMessage(conversationId, text, attachments);
-
-        // emit realtime
 
         res.status(200).send({
             success: true,
@@ -62,6 +64,7 @@ export const getMessageByConversationController = async (req, res) => {
 
         const messages = await messageModel.find({ conversation: conversationId })
             .populate("sender", "name email role")
+            .populate("attachments", "title s3_url key fileType")
             .sort({ createdAt: -1 })
 
         res.status(200).send({

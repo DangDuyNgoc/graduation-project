@@ -23,7 +23,7 @@ export const setupSocket = (server) => {
     }
     try {
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-      socket.userId = decoded.id;
+      socket.userId = decoded.userId;
       next();
     } catch (error) {
       console.log("Socket auth error: ", error);
@@ -35,10 +35,16 @@ export const setupSocket = (server) => {
   io.on("connection", (socket) => {
     console.log("New client connected:", socket.id);
 
+    socket.emit("userInfo", { userId: socket.userId });
     socket.on("joinConversation", (conversationId) => {
       socket.join(conversationId);
       console.log(`User joined conversation ${conversationId}`);
     });
+
+    socket.on("leaveConversation", (conversationId) => {
+      socket.leave(conversationId);
+      console.log(`User ${socket.userId} left conversation ${conversationId}`);
+    })
 
     // when the user is typing 
     socket.on("typing", (conversationId) => {
@@ -67,11 +73,16 @@ export const setupSocket = (server) => {
         // updated lastMessageAt cho Conversation
         await updateLastMessage(conversationId, text, attachments);
 
+        const populatedMessage = await newMessage.populate([
+          { path: "sender", select: "name email role" },
+          { path: "attachments" }
+        ]);
+
         // send message to everyone in chat room
-        io.to(conversationId).emit("receiveMessage", newMessage);
+        io.to(conversationId).emit("receiveMessage", populatedMessage);
 
         // confirm send message successfully
-        socket.emit("messageSaved", newMessage)
+        socket.emit("messageSaved", populatedMessage)
       } catch (error) {
         console.error("Error sending message:", error);
       }

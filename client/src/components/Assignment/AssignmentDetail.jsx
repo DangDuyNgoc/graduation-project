@@ -114,7 +114,6 @@ const AssignmentDetail = () => {
       );
 
       const updatedFiles = [...prevFiles, ...newFiles];
-      console.log("Selected files:", updatedFiles);
       return updatedFiles;
     });
   };
@@ -131,7 +130,6 @@ const AssignmentDetail = () => {
         (file) => !prevFiles.some((f) => f.name === file.name)
       );
       const updatedFiles = [...prevFiles, ...newFiles];
-      console.log("Selected files:", updatedFiles);
       return updatedFiles;
     });
   };
@@ -146,7 +144,6 @@ const AssignmentDetail = () => {
         formData.append("fileUrls", file);
       });
 
-      console.log("Selected files upload:", selectedFile);
       formData.append("keepOld", keepOld);
 
       const isUpdate = Boolean(submission?._id);
@@ -166,7 +163,7 @@ const AssignmentDetail = () => {
         toast.success(
           submission
             ? "Submission Updated!"
-            : "Submission uploaded successfully!"
+            : null
         );
         await fetchAssignments();
         setSelectedFile([]);

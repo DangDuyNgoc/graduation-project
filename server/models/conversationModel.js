@@ -8,14 +8,15 @@ const conversationSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    participants: {
-        type: mongoose.Types.ObjectId,
-        ref: "user",
-        required: true
-    },
+    participants: [
+        {
+            type: mongoose.Types.ObjectId,
+            ref: "user",
+            required: true
+        }
+    ],
     lastMessage: {
-        type: Date,
-        default: Date.now
+        type: String
     },
     lastMessageAt: {
         type: Date,

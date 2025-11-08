@@ -1,22 +1,26 @@
+import mongoose from "mongoose";
 import conversationModel from "../models/conversationModel.js";
 
 export const createOrGetConversation = async (req, res) => {
     try {
         const { participants, isGroup, name, adminId } = req.body;
 
-        if (!participants || Array.isArray(participants) || participants.length < 2) {
+        if (!participants || !Array.isArray(participants) || participants.length < 2) {
             return res.status(400).send({
                 success: false,
                 message: "Participants are required and should be more than 2"
             });
         };
 
+        // convert participants -> ObjectId[]
+        const participantsIds = participants.map((id) => new mongoose.Types.ObjectId(id));
+
         // group chat
         if (isGroup) {
             const newGroup = await conversationModel.create({
                 name: name || "New Group",
                 isGroup: true,
-                participants,
+                participants: participantsIds,
                 groupAdmin: adminId
             });
 
@@ -30,7 +34,8 @@ export const createOrGetConversation = async (req, res) => {
         // private chat
         const existing = await conversationModel.findOne({
             isGroup: false,
-            participants: { $all: participants, $size: 2 }
+            participants: { $all: participantsIds },
+            $expr: { $eq: [{ $size: "$participants" }, participantsIds.length] },
         });
 
         if (existing) {
@@ -44,7 +49,7 @@ export const createOrGetConversation = async (req, res) => {
         // if not found, create new
         const newConversation = await conversationModel.create({
             isGroup: false,
-            participants
+            participants: participantsIds
         });
 
         return res.status(200).send({
