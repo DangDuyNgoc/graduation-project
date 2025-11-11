@@ -1,0 +1,12 @@
+flask
+pymongo
+requests
+pdfplumber
+python-docx
+sentence-transformers
+langchain
+faiss-cpu
+beautifulsoup4
+keybert
+trafilatura
+python-dotenv
