@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { validateEmail } from "@/utils/helper";
 import api from "@/utils/axiosInstance";
 import { UserContext } from "@/context/UserContext";
+import { connectSocket } from "@/utils/socket";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -56,6 +57,7 @@ const Login = () => {
 
       if (token) {
         updateUser(userInfo);
+        connectSocket();
         navigate("/dashboard");
       }
     } catch (error) {

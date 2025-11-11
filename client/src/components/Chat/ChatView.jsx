@@ -1,12 +1,21 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useContext } from "react";
 import { Input } from "../ui/input";
 import Picker from "emoji-picker-react";
 import { Smile, Paperclip, X } from "lucide-react";
 import { getSocket } from "@/utils/socket";
 import api from "@/utils/axiosInstance";
 import { Avatar, AvatarImage } from "@radix-ui/react-avatar";
+import { UserContext } from "@/context/UserContext";
+import { formatExactTime, getTimeAgo } from "@/utils/timeFormatter";
 
-const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
+const ChatView = ({
+  conversationId,
+  isOpen,
+  teacher,
+  onClose,
+  isOpenChatView = true,
+}) => {
+  const { user } = useContext(UserContext);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [showPicker, setShowPicker] = useState(false);
@@ -19,11 +28,13 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
   const typingTimeout = useRef(null);
 
   const socket = getSocket();
+  console.log("current user: ", user._id);
 
   const fetchMessage = async () => {
     try {
       const { data } = await api.get(`/message/get-message/${conversationId}`);
       if (data.success) {
+        console.log("message sender id: ", data.messages.sender);
         setMessages(data.messages.reverse());
       }
     } catch (error) {
@@ -35,6 +46,8 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
   useEffect(() => {
     if (!conversationId) return null;
 
+    setMessages([]);
+
     socket.emit("joinConversation", conversationId);
 
     fetchMessage();
@@ -42,6 +55,17 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
     socket.on("receiveMessage", (newMessage) => {
       console.log("Received:", newMessage);
       setMessages((prev) => [...prev, newMessage]);
+    });
+
+    socket.on("messageRead", ({ conversationId: cid, userId }) => {
+      if (cid === conversationId) {
+        setMessages((prev) =>
+          prev.map((msg) => {
+            if (msg.readBy?.includes(userId)) return msg;
+            return { ...msg, readBy: [...(msg.readBy || []), userId] };
+          })
+        );
+      }
     });
 
     // when somebody typing
@@ -62,6 +86,7 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
       socket.off("receiveMessage");
       socket.off("userTyping");
       socket.off("userStopTyping");
+      socket.off("messageRead");
     };
   }, [conversationId]);
 
@@ -83,7 +108,7 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
         const formData = new FormData();
         formData.append("conversationId", conversationId);
         formData.append("text", input);
-        formData.append("senderId", socket.userId);
+        formData.append("senderId", user._id);
         currentFiles.forEach((file) => {
           formData.append("materials", file);
         });
@@ -198,7 +223,9 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="fixed bottom-16 right-4 w-80 h-96 bg-white border border-gray-300 rounded-lg shadow-xl flex flex-col z-50"
+      className={`flex flex-col bg-white border rounded-lg shadow-md ${
+        isOpenChatView ? "w-full h-full" : "fixed bottom-16 right-4 w-80 h-96"
+      }`}
     >
       {/* Header */}
       <div className="flex items-center p-0.5 bg-primary text-white rounded-t-lg">
@@ -225,8 +252,8 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
       {/* Messages */}
       <div className="flex-1 p-4 overflow-y-auto relative">
         {messages.map((msg, index) => {
-          const isMine =
-            msg.sender?._id?.toString?.() === socket.userId?.toString?.();
+          const isMine = msg.sender?._id?.toString?.() === user._id?.toString();
+          const isLastMessage = index === messages.length - 1;
 
           return (
             <div
@@ -235,7 +262,23 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
                 isMine ? "justify-end" : "justify-start"
               }`}
             >
+              {/* Avatar */}
+              {!isMine && (
+                <div className="w-6 h-6 rounded-full overflow-hidden mr-2">
+                  <Avatar className="w-full h-full">
+                    <AvatarImage
+                      src={
+                        teacher?.avatar?.url ||
+                        "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
+                      }
+                      alt={msg.sender?.name || "avatar"}
+                    />
+                  </Avatar>
+                </div>
+              )}
+
               <div
+                title={formatExactTime(msg.createdAt)}
                 className={`inline-block text-sm p-2 rounded-lg max-w-[70%] break-words ${
                   isMine ? "text-white" : "bg-gray-200 text-black"
                 }`}
@@ -244,10 +287,8 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
                 {msg.text && (
                   <p
                     className={`${
-                      isMine
-                        ? "bg-blue-500 p-1 rounded"
-                        : "bg-gray-200 p-1 rounded"
-                    } mb-1`}
+                      isMine ? "bg-blue-500 p-1" : "bg-gray-200 p-1"
+                    } mb-1 rounded-full`}
                   >
                     {msg.text}
                   </p>
@@ -257,7 +298,6 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
                 {msg.attachments && msg.attachments.length > 0 && (
                   <div className="space-y-1">
                     {msg.attachments.map((file, i) => {
-                      console.log(msg.attachments);
                       const isImage = file.fileType?.startsWith("image/");
                       return isImage ? (
                         <>
@@ -304,12 +344,42 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
                     })}
                   </div>
                 )}
+
+                {isMine && isLastMessage && (
+                  <div className="text-[10px] text-gray-500 text-right mt-0.5">
+                    {msg.readBy?.length === 0 ? (
+                      <span>Sent {getTimeAgo(msg.createdAt)}</span>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
+
+        {/* Animation typing */}
         {typingUsers.length > 0 && (
-          <div className=""> Someone is typing...</div>
+          <div className="flex items-center space-x-2 mt-1">
+            <div className="flex -space-x-1">
+              <div className="w-6 h-6 rounded-full overflow-hidden border border-white">
+                <Avatar className="w-full h-full">
+                  <AvatarImage
+                    src={
+                      teacher?.avatar?.url ||
+                      "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
+                    }
+                    alt="avatar image"
+                  />
+                </Avatar>
+              </div>
+              {/* typing dot */}
+              <div className="flex space-x-1 items-center ml-2">
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
+              </div>
+            </div>
+          </div>
         )}
         <div ref={messagesEndRef} />
 
@@ -416,4 +486,4 @@ const ChatFrame = ({ conversationId, isOpen, teacher, onClose }) => {
   );
 };
 
-export default ChatFrame;
+export default ChatView;

@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, FileText, Upload, User, Users, GraduationCap } from "lucide-react";
+import {
+  Home,
+  FileText,
+  Upload,
+  User,
+  Users,
+  GraduationCap,
+  MessageCircleMore,
+} from "lucide-react";
 import api from "@/utils/axiosInstance";
 
 const Sidebar = () => {
@@ -42,6 +50,11 @@ const Sidebar = () => {
       name: "My Submissions",
       path: "/my-submissions",
       icon: <Upload className="size-4" />,
+    },
+    {
+      name: "Conversations",
+      path: "/conversations",
+      icon: <MessageCircleMore className="size-4" />,
     },
     {
       name: "Contact Teachers",

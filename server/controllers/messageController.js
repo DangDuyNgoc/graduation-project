@@ -36,11 +36,11 @@ export const sendMessageController = async (req, res) => {
         });
 
         await newMessage.populate([
-            {path: "sender", select: "name email role avatar"},
-            {path: "attachments", select: "title s3_url key fileType uploadedAt"}
+            { path: "sender", select: "name email role avatar" },
+            { path: "attachments", select: "title s3_url key fileType uploadedAt" }
         ]);
 
-        await updateLastMessage(conversationId, text, attachments);
+        await updateLastMessage(conversationId, text, attachments, senderId);
 
         res.status(200).send({
             success: true,
@@ -63,7 +63,7 @@ export const getMessageByConversationController = async (req, res) => {
         const messageModel = getMessageModel();
 
         const messages = await messageModel.find({ conversation: conversationId })
-            .populate("sender", "name email role")
+            .populate("sender", "name email role avatar")
             .populate("attachments", "title s3_url key fileType")
             .sort({ createdAt: -1 })
 

@@ -67,18 +67,19 @@ export const createOrGetConversation = async (req, res) => {
 };
 
 // get all conversations of user
-export const getUserConversations = async (req, res) => {
+export const getAllUserConversations = async (req, res) => {
     try {
         const { userId } = req.params;
         const conversations = await conversationModel.find({
             participants: userId
         })
-            .populate("participants", "name email role")
+            .populate("participants", "name email role avatar")
+            .populate("lastMessage", "text attachments createdAt")
             .sort({ updatedAt: -1 })
 
         return res.status(200).send({
             success: true,
-            message: "Get user conversations successfully",
+            message: "Fetched all conversations successfully",
             conversations
         })
     } catch (error) {
@@ -90,13 +91,69 @@ export const getUserConversations = async (req, res) => {
     }
 };
 
-export const updateLastMessage = async (conversationId, text, attachments) => {
+// get one conversation 
+export const getOneConversationController = async (req, res) => {
     try {
+        const { conversationId } = req.params;
+
+        if (!conversationId) {
+            return res.status(400).send({
+                success: false,
+                message: "Please provide conversation id",
+            });
+        };
+
+        const conversation = await conversationModel.findById(conversationId)
+            .populate("participants", "name email role avatar")
+            .populate("groupAdmin", "name")
+            .lean()
+
+        if (!conversation) {
+            return res.status(404).json({
+                success: false,
+                message: "Conversation not found",
+            });
+        }
+
+        if (conversation.lastMessageSender) {
+            const lastSender = await conversationModel
+                .populate(conversation, {
+                    path: "lastMessageSender",
+                    select: "name avatar email"
+                });
+
+            conversation.lastMessageSender = lastSender.lastMessageSender;
+        }
+
+        return res.status(200).send({
+            success: true,
+            message: "Fetched Conversation by id successfully",
+            conversation
+        });
+    } catch (error) {
+        console.log("Error in get conversation by ID: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal Server Error",
+        })
+    }
+}
+
+export const updateLastMessage = async (conversationId, text, attachments, senderId, participants) => {
+    try {
+        const conversation = await conversationModel.findById(conversationId).lean();
+        if (!conversation) return;
+
+        const participants = conversation.participants;
+
         await conversationModel.findByIdAndUpdate(conversationId, {
             lastMessage: text || (attachments?.length ? "attached files" : ""),
             lastMessageAt: new Date(),
+            lastMessageSender: senderId,
+
         })
     } catch (error) {
         console.log("Error in update message: ", error);
     }
-}
+};
+

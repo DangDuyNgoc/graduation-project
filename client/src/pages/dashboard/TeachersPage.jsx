@@ -1,4 +1,5 @@
 import ChatFrame from "@/components/Chat/ChatFrame";
+import ChatView from "@/components/Chat/ChatView";
 import SearchBar from "@/components/Common/SearchBar";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -99,7 +100,10 @@ function TeachersPage() {
                     <div className="cursor-pointer rounded-full border-2 border-dashed border-gray-300 transition">
                       <Avatar className="w-20 h-20">
                         <AvatarImage
-                          src={teacher?.avatar?.url}
+                          src={
+                            teacher?.avatar?.url ||
+                            "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
+                          }
                           alt="avatar image"
                         />
                       </Avatar>
@@ -121,7 +125,7 @@ function TeachersPage() {
                   </Button>
 
                   {selectedTeacher && (
-                    <ChatFrame
+                    <ChatView
                       conversationId={conversationId}
                       isOpen={true}
                       teacher={selectedTeacher}
@@ -129,6 +133,7 @@ function TeachersPage() {
                         setSelectedTeacher(null);
                         setConversationId(null);
                       }}
+                      isOpenChatView={false}
                     />
                   )}
                 </div>

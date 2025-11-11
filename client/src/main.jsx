@@ -26,6 +26,7 @@ import TeachersSubmissionPage from "./pages/dashboard/TeachersSubmisionPage";
 import TeacherSubmissionStudentPage from "./pages/dashboard/TeacherSubmissionStudentPage";
 import TeacherEnrolledStudent from "./pages/dashboard/TeacherEnrolledStudent";
 import TeacherEnrolStudent from "./pages/dashboard/TeacherEnrolStudent";
+import ConversationsPage from "./pages/dashboard/ConversationsPage";
 
 const root = createBrowserRouter([
   {
@@ -62,6 +63,10 @@ const root = createBrowserRouter([
       {
         path: "/teachers",
         element: <TeachersPage />,
+      },
+      {
+        path: "/conversations",
+        element: <ConversationsPage />,
       },
       {
         path: "/plagiarism-report/:id",

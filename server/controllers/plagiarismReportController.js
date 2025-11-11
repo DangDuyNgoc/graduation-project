@@ -48,7 +48,7 @@ export const checkPlagiarismController = async (req, res) => {
       sourceId: s.sourceId,
       matchedText: s.matchedText,
       similarity: s.similarity,
-    }));
+    }));  
 
     // Check if report already exists
     let existingReport = await PlagiarismReportModel.findOne({ submissionId });

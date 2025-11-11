@@ -9,7 +9,7 @@ const DashboardLayout = ({ children }) => {
       <Sidebar />
       <div className="flex flex-col flex-1 ml-56">
         <Header />
-        <main className="flex-1 mt-16 p-6">{children}</main>
+        <main className="flex-1 mt-14 p-4">{children}</main>
         <Footer />
       </div>
     </div>

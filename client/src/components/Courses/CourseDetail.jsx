@@ -1,5 +1,6 @@
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
+import { formatLateDuration } from "@/utils/timeFormatter";
 import { ClockFading, LoaderCircle, Paperclip } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -134,52 +135,86 @@ const CourseDetail = () => {
               </div>
             ) : assignments?.length > 0 ? (
               <ul className="space-y-4">
-                {assignments.map((a) => (
-                  <Link
-                    to={`/assignment/${a._id}`}
-                    key={a._id}
-                    className="block border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800">
-                          {a.title}
-                        </h3>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {a.description || "No description provided."}
-                        </p>
-                        <p className="text-sm text-gray-500 mt-2">
-                          Due: {new Date(a.dueDate).toLocaleDateString()}
-                        </p>
-                      </div>
+                {assignments.map((a) => {
+                  const dueDate = new Date(a.dueDate);
+                  const deadline = a.allowLateSubmission
+                    ? new Date(
+                        dueDate.getTime() + a.lateSubmissionDuration * 60000
+                      )
+                    : dueDate;
 
-                      <div>
-                        {a?.materials?.length > 0 ? (
-                          <ul className="text-sm text-blue-600">
-                            {a.materials.map((m, i) => (
-                              <li key={i}>
-                                <a
-                                  href={m.s3_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  download
-                                  className="hover:underline flex items-center"
-                                >
-                                  <Paperclip size={16} className="mr-1" />
-                                  {m.title || "Download file"}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <span className="text-gray-400 italic text-sm">
-                            No materials
-                          </span>
-                        )}
+                  const isExpired = new Date() > deadline;
+
+                  const expiredCss = isExpired
+                    ? "pointer-events-none opacity-70 bg-gray-100 cursor-not-allowed"
+                    : "hover:bg-gray-50";
+
+                  return (
+                    <Link
+                      to={isExpired ? "#" : ` /assignment/${a._id}`}
+                      key={a._id}
+                      className={`block border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition ${expiredCss}`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-800">
+                            {a.title}
+                          </h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {a.description || "No description provided."}
+                          </p>
+                          <p className="text-sm text-gray-500 mt-2">
+                            Due: {dueDate.toLocaleDateString()}
+                          </p>
+
+                          {a.allowLateSubmission && (
+                            <p className="text-gray-500 italic">
+                              Allow late submission:{" "}
+                              {formatLateDuration(a.lateSubmissionDuration)}{" "}
+                              {" — until "}
+                              {deadline.toLocaleString()}
+                            </p>
+                          )}
+
+                          {isExpired ? (
+                            <span className="ml-1 px-2 py-1 rounded bg-red-100 text-red-600 text-xs font-medium">
+                              Closed
+                            </span>
+                          ) : (
+                            <span className="ml-1 px-2 py-1 rounded bg-green-100 text-green-600 text-xs font-medium">
+                              Open
+                            </span>
+                          )}
+                        </div>
+
+                        <div>
+                          {a?.materials?.length > 0 ? (
+                            <ul className="text-sm text-blue-600">
+                              {a.materials.map((m, i) => (
+                                <li key={i}>
+                                  <a
+                                    href={m.s3_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download
+                                    className="hover:underline flex items-center"
+                                  >
+                                    <Paperclip size={16} className="mr-1" />
+                                    {m.title || "Download file"}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="text-gray-400 italic text-sm">
+                              No materials
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </ul>
             ) : (
               <p className="text-gray-500">No assignments yet.</p>

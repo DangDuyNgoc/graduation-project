@@ -67,11 +67,12 @@ export const setupSocket = (server) => {
           conversation: conversationId,
           sender: socket.userId,
           text,
-          attachments
+          attachments,
+          readBy: [socket.userId],
         });
 
         // updated lastMessageAt cho Conversation
-        await updateLastMessage(conversationId, text, attachments);
+        await updateLastMessage(conversationId, text, attachments, socket.userId);
 
         const populatedMessage = await newMessage.populate([
           { path: "sender", select: "name email role" },
@@ -87,6 +88,30 @@ export const setupSocket = (server) => {
         console.error("Error sending message:", error);
       }
     });
+
+    socket.on("markAsRead", async ({ conversationId }) => {
+      try {
+        const message = getMessageModel();
+
+        // update the unread message
+        await message.updateMany(
+          {
+            conversation: conversationId,
+            readBy: { $ne: socket.userId },
+          },
+          { $push: { readBy: socket.userId } }
+        );
+
+        io.to(conversationId).emit("messageRead", {
+          conversationId,
+          userId: socket.userId,
+        });
+
+        console.log(`User ${socket.userId} marked messages as read in ${conversationId}`);
+      } catch (error) {
+        console.error("Error marking messages as read:", error);
+      }
+    })
 
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
