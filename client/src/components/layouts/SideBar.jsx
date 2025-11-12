@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Home,
@@ -10,9 +10,11 @@ import {
   MessageCircleMore,
 } from "lucide-react";
 import api from "@/utils/axiosInstance";
+import { UserContext } from "@/context/UserContext";
 
 const Sidebar = () => {
   const [assignment, setAssignment] = useState(0);
+  const { user } = useContext(UserContext);
 
   const fetchAssignments = async () => {
     try {
@@ -29,16 +31,25 @@ const Sidebar = () => {
     fetchAssignments();
   }, []);
 
-  const menuItems = [
+  const teacherMenu = [
     {
       name: "Dashboard",
       path: "/dashboard",
       icon: <Home className="size-4" />,
     },
     {
-      name: "Courses",
+      name: "My Courses",
       path: "/teacher-courses",
       icon: <GraduationCap className="size-4" />,
+    },
+    { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
+  ];
+
+  const studentMenu = [
+    {
+      name: "Dashboard",
+      path: "/dashboard",
+      icon: <Home className="size-4" />,
     },
     {
       name: "Assignments",
@@ -63,6 +74,8 @@ const Sidebar = () => {
     },
     { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
   ];
+
+  const menuItems = user?.role === "TEACHER" ? teacherMenu : studentMenu;
 
   return (
     <aside className="fixed top-16 left-0 w-56 h-[calc(100vh-4rem)] bg-white border-r shadow-sm flex flex-col py-6 px-4">

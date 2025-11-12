@@ -621,6 +621,7 @@ def process_submission():
 
             chunks = recursive_chunk(text, chunk_size=500, chunk_overlap=50)
             embeddings = model.encode(chunks, convert_to_numpy=True).astype(np.float32)
+            faiss.normalize_L2(embeddings)
 
             # --- Lưu chunks + embeddings ---
             for chunk_text, embedding in zip(chunks, embeddings):
@@ -819,17 +820,24 @@ def ddg_search_urls(query, num_results=5):
     url = "https://duckduckgo.com/html/"
     params = {"q": query}
     headers = {"User-Agent": "Mozilla/5.0"}
-    resp = requests.get(url, params=params, headers=headers)
-    soup = BeautifulSoup(resp.text, "html.parser")
     urls = []
-    for a in soup.find_all("a", class_="result__a", limit=num_results):
-        href = a.get("href")
-        if href and "uddg=" in href:
-            parsed = urllib.parse.urlparse(href)
-            query_dict = urllib.parse.parse_qs(parsed.query)
-            real_url = query_dict.get("uddg", [None])[0]
-            if real_url:
-                urls.append(real_url)
+
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=5)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        for a in soup.find_all("a", class_="result__a", limit=num_results):
+            href = a.get("href")
+            if href and "uddg=" in href:
+                parsed = urllib.parse.urlparse(href)
+                query_dict = urllib.parse.parse_qs(parsed.query)
+                real_url = query_dict.get("uddg", [None])[0]
+                if real_url:
+                    urls.append(real_url)
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] DuckDuckGo request failed: {e}")
+
     return urls
 
 
@@ -838,11 +846,9 @@ def fetch_web_snippet(url, max_words=1500, chunk_size=500, chunk_overlap=50):
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
 
-        # Send GET request, verify SSL certificates by default
+        # Send GET request, with timeout to avoid hanging
         resp = requests.get(url, headers=headers, timeout=(2, 5))
-        if resp.status_code != 200:
-            return []
-
+        resp.raise_for_status()  # Raise exception for HTTP errors
         downloaded = resp.text
 
         # Extract main textual content from HTML
@@ -881,9 +887,14 @@ def fetch_web_snippet(url, max_words=1500, chunk_size=500, chunk_overlap=50):
 
         return chunks
 
+    except requests.exceptions.RequestException as e:
+        # Network errors: timeout, DNS fail, connection refused...
+        print(f"[ERROR] Cannot fetch URL {url}: {e}")
     except Exception as e:
-        print(f"[ERROR] Cannot fetch snippet from {url}: {e}")
-        return []
+        # Any other processing error (parsing, chunking, etc.)
+        print(f"[ERROR] Cannot process snippet from {url}: {e}")
+
+    return []
 
 
 # Normalize text before compare
@@ -965,49 +976,45 @@ def check_plagiarism_material(
 
             urls = ddg_search_urls(query, num_results=num_results)
             urls = list(dict.fromkeys(urls))  # remove duplicates
-            if not urls:
-                continue
+            if urls:
+                seen_snippets = set()
+                for url in urls:
+                    snippets = fetch_web_snippet(url, max_words=1500, chunk_size=500)
+                    if not snippets:
+                        continue
 
-            seen_snippets = set()
-            for url in urls:
-                snippets = fetch_web_snippet(url, max_words=1500, chunk_size=500)
-                if not snippets:
-                    continue
+                    # remove duplicate snippet text
+                    snippets = [s for s in snippets if s not in seen_snippets]
+                    seen_snippets.update(snippets)
 
-                # remove duplicate snippet text
-                snippets = [s for s in snippets if s not in seen_snippets]
-                seen_snippets.update(snippets)
+                    sem_sims = semantic_similarity_batch(chunk_text, snippets, model)
 
-                sem_sims = semantic_similarity_batch(chunk_text, snippets, model)
+                    for snippet, sem_sim in zip(snippets, sem_sims):
+                        exact_sim = substring_similarity(chunk_text, snippet)
+                        match_type = None
 
-                for snippet, sem_sim in zip(snippets, sem_sims):
-                    exact_sim = substring_similarity(chunk_text, snippet)
-                    match_type = None
+                        if exact_sim >= exact_threshold:
+                            match_type = "EXACT COPY"
+                        elif sem_sim >= semantic_threshold:
+                            match_type = "SEMANTIC MATCH"
 
-                    if exact_sim >= exact_threshold:
-                        match_type = "EXACT COPY"
-                    elif sem_sim >= semantic_threshold:
-                        match_type = "SEMANTIC MATCH"
-
-                    if match_type:
-                        results["online"].append(
-                            {
-                                "chunkIndex": int(idx),
-                                "chunkText": chunk_text,
-                                "url": url,
-                                "snippet": snippet,
-                                "exact_sim": float(exact_sim),
-                                "semantic_sim": float(sem_sim),
-                                "match_type": match_type,
-                            }
-                        )
-                        print(
-                            f"[MATCH-{match_type}] URL={url[:60]}... "
-                            f"(E={exact_sim:.2f}, S={sem_sim:.2f})"
-                        )
+                        if match_type:
+                            results["online"].append(
+                                {
+                                    "chunkIndex": idx,
+                                    "chunkText": chunk_text,
+                                    "url": url,
+                                    "snippet": snippet,
+                                    "exact_sim": float(exact_sim),
+                                    "semantic_sim": float(sem_sim),
+                                    "match_type": match_type,
+                                }
+                            )
+                            print(
+                                f"[MATCH-{match_type}] URL={url} (E={exact_sim:.2f}, S={sem_sim:.2f})"
+                            )
 
             time.sleep(0.5)
-
         except Exception as e:
             print(f"[ERROR online] {e}")
 
@@ -1016,13 +1023,14 @@ def check_plagiarism_material(
             if not embedding_json:
                 continue
 
+            # Load and normalize chunk embedding
             chunk_embedding = np.array(json.loads(embedding_json), dtype=np.float32)
             if chunk_embedding.size == 0:
                 continue
-
-            faiss.normalize_L2(chunk_embedding.reshape(1, -1))
+            chunk_embedding = chunk_embedding / np.linalg.norm(chunk_embedding)
 
             for index_name, faiss_index in faiss_indexes:
+                # FAISS search (inner product)
                 D, I = faiss_index.search(
                     np.array([chunk_embedding], dtype=np.float32), k=top_k + 1
                 )
@@ -1046,20 +1054,18 @@ def check_plagiarism_material(
                     neighbor_embedding = np.array(
                         json.loads(n_embedding_json), dtype=np.float32
                     )
-                    denom = np.linalg.norm(chunk_embedding) * np.linalg.norm(
+                    if neighbor_embedding.size == 0:
+                        continue
+                    neighbor_embedding = neighbor_embedding / np.linalg.norm(
                         neighbor_embedding
                     )
-                    similarity = (
-                        float(np.dot(chunk_embedding, neighbor_embedding) / denom)
-                        if denom != 0
-                        else 0.0
-                    )
 
-                    total_sim += similarity  # sum avg
+                    similarity = float(np.dot(chunk_embedding, neighbor_embedding))
+                    total_sim += similarity
 
                     results["database"].append(
                         {
-                            "chunkIndex": int(idx),
+                            "chunkIndex": idx,
                             "chunkText": chunk_text,
                             "neighborText": n_text,
                             "neighborMaterialId": (
@@ -1067,7 +1073,7 @@ def check_plagiarism_material(
                                 if n_material_id is not None
                                 else None
                             ),
-                            "similarity": float(similarity),
+                            "similarity": similarity,
                             "chunkFaissId": int(faiss_id),
                             "neighborFaissId": int(neighbor_id),
                             "indexSource": index_name,
@@ -1078,13 +1084,15 @@ def check_plagiarism_material(
             print(f"[ERROR db] {e}")
 
     conn.close()
+
+    # Sort database matches by similarity descending
     results["database"].sort(key=lambda x: x.get("similarity", 0.0), reverse=True)
 
-    # calculate avg all chunks
+    # Average similarity
     similarityScore = round(total_sim / total_chunks, 4) if total_chunks > 0 else 0.0
     results["similarityScore"] = similarityScore
 
-    print(f"\n Done scanning material_id={material_id}")
+    print(f"\n[INFO] Done scanning material_id={material_id}")
     print(f" Online matches: {len(results['online'])}")
     print(f" Database matches: {len(results['database'])}")
     print(f" Avg similarityScore: {similarityScore}")

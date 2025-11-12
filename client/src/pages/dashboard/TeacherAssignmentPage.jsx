@@ -1,4 +1,9 @@
-import { deleteCourse, getOneCourse } from "@/api/courseApi";
+import {
+  deleteAllCourseMaterials,
+  deleteCourse,
+  deleteMaterialCourse,
+  getOneCourse,
+} from "@/api/courseApi";
 import AssignmentList from "@/components/Assignment/AssigmentList";
 import DeleteDialog from "@/components/Common/DeleteDialog";
 import LoadingSpinner from "@/components/Common/LoadingSpinner";
@@ -19,6 +24,8 @@ export default function TeacherAssignmentPage() {
   const menuRef = useRef(null);
   const [openDelete, setOpenDelete] = useState(false);
   const [loadingDelete, setLoadingDelete] = useState(false);
+  const [deleteType, setDeleteType] = useState(null);
+  const [selectedMaterial, setSelectedMaterial] = useState(null);
 
   const fetchCourseDetail = async () => {
     setLoading(true);
@@ -43,6 +50,42 @@ export default function TeacherAssignmentPage() {
       toast.error(err.response?.data?.message || "Failed to delete course");
     } finally {
       setLoadingDelete(false);
+      setOpenDelete(false);
+    }
+  };
+
+  const handleDeleteCourseAllMaterials = async () => {
+    try {
+      setLoadingDelete(true);
+      const res = await deleteAllCourseMaterials(id);
+      toast.success(res?.message || "All materials deleted successfully!");
+      fetchCourseDetail();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Failed to delete materials");
+    } finally {
+      setLoadingDelete(false);
+      setOpenDelete(false);
+    }
+  };
+
+  const handleDeleteOneMaterial = async () => {
+    if (!selectedMaterial) return;
+    try {
+      setLoadingDelete(true);
+      const res = await deleteMaterialCourse(
+        id,
+        selectedMaterial.s3_key,
+        selectedMaterial._id
+      );
+      toast.success(res?.message || "Material deleted successfully!");
+      fetchCourseDetail();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.message || "Failed to delete material");
+    } finally {
+      setLoadingDelete(false);
+      setSelectedMaterial(null);
       setOpenDelete(false);
     }
   };
@@ -141,7 +184,7 @@ export default function TeacherAssignmentPage() {
                       onClick={() =>
                         navigate(`/teacher-enrolled-student/${course._id}`)
                       }
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       Manage students
                     </button>
@@ -151,7 +194,7 @@ export default function TeacherAssignmentPage() {
                         setOpenMenu(false);
                         setOpenDialog(true);
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       Update
                     </button>
@@ -159,11 +202,23 @@ export default function TeacherAssignmentPage() {
                     <button
                       onClick={() => {
                         setOpenMenu(false);
+                        setDeleteType("course");
                         setOpenDelete(true);
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                     >
-                      Delete
+                      Delete course
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setOpenMenu(false);
+                        setDeleteType("materials");
+                        setOpenDelete(true);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Delete all resources
                     </button>
                   </div>
                 )}
@@ -194,11 +249,16 @@ export default function TeacherAssignmentPage() {
                       </a>
                       <p className="text-sm text-gray-500">{file.fileType}</p>
                     </div>
-                    <span className="text-xs text-gray-400">
-                      {file.processingStatus === "done"
-                        ? "Ready"
-                        : "Processing"}
-                    </span>
+                    <button
+                      className="text-xs text-red-500 hover:underline cursor-pointer"
+                      onClick={() => {
+                        setSelectedMaterial(file);
+                        setDeleteType("one");
+                        setOpenDelete(true);
+                      }}
+                    >
+                      Delete
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -212,9 +272,21 @@ export default function TeacherAssignmentPage() {
           <DeleteDialog
             open={openDelete}
             setOpen={setOpenDelete}
-            title={`Delete course "${course?.name}"?`}
+            title={
+              deleteType === "materials"
+                ? `Delete all materials of "${course?.name}"?`
+                : deleteType === "one"
+                ? `Delete material "${selectedMaterial?.title}"?`
+                : `Delete course "${course?.name}"?`
+            }
             loading={loadingDelete}
-            onConfirm={handleDeleteCourse}
+            onConfirm={
+              deleteType === "materials"
+                ? handleDeleteCourseAllMaterials
+                : deleteType === "one"
+                ? handleDeleteOneMaterial
+                : handleDeleteCourse
+            }
           />
         </>
       )}

@@ -16,6 +16,7 @@ import plagiarismRouter from "./routes/plagiarismReportRoute.js";
 import conversationRoute from "./routes/conversationRoute.js";
 import messageRoute from "./routes/messageRoute.js";
 import { setupSocket } from "./socket/socket.js";
+import chatbotRoute from "./routes/chatbotRoute.js";
 
 dotenv.config();
 
@@ -51,6 +52,7 @@ app.use("/api/submission", submissionRoute);
 app.use("/api/plagiarism", plagiarismRouter)
 app.use("/api/conversation", conversationRoute)
 app.use("/api/message", messageRoute)
+app.use("/api/chatbot", chatbotRoute);
 
 // socket
 const server = http.createServer(app);

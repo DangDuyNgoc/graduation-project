@@ -14,6 +14,13 @@ export const deleteCourse = async (courseId) => {
   return data;
 };
 
+export const deleteAllCourse = async () => {
+  const { data } = await api.delete(`/course/delete-all-course`, {
+    withCredentials: true,
+  });
+  return data;
+};
+
 export const getOneCourse = async (courseId) => {
   const { data } = await api.get(`/course/get-course/${courseId}`, {
     withCredentials: true,
@@ -86,5 +93,27 @@ export const getAllStudent = async ({
     }
   );
 
+  return data;
+};
+
+export const deleteMaterialCourse = async (
+  courseId,
+  materialKey,
+  materialId
+) => {
+  const { data } = await api.delete(`/course/delete-one-course-material`, {
+    data: { courseId, materialKey, materialId },
+    withCredentials: true,
+  });
+  return data;
+};
+
+export const deleteAllCourseMaterials = async (courseId) => {
+  const { data } = await api.delete(
+    `/course/delete-course-materials/${courseId}`,
+    {
+      withCredentials: true,
+    }
+  );
   return data;
 };
