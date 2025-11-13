@@ -8,6 +8,7 @@ import {
   Users,
   GraduationCap,
   MessageCircleMore,
+  Bot,
 } from "lucide-react";
 import api from "@/utils/axiosInstance";
 import { UserContext } from "@/context/UserContext";
@@ -42,6 +43,16 @@ const Sidebar = () => {
       path: "/teacher-courses",
       icon: <GraduationCap className="size-4" />,
     },
+    {
+      name: "Conversations",
+      path: "/conversations",
+      icon: <MessageCircleMore className="size-4" />,
+    },
+    {
+      name: "ChatBot AI",
+      path: "/chatbot-ai",
+      icon: <Bot className="size-4" />,
+    },
     { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
   ];
 
@@ -66,6 +77,11 @@ const Sidebar = () => {
       name: "Conversations",
       path: "/conversations",
       icon: <MessageCircleMore className="size-4" />,
+    },
+    {
+      name: "ChatBot AI",
+      path: "/chatbot-ai",
+      icon: <Bot className="size-4" />,
     },
     {
       name: "Contact Teachers",

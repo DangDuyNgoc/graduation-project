@@ -136,6 +136,15 @@ export default function TeacherEnrolledStudent() {
             </tbody>
           </table>
         )}
+
+        <div className="mt-3">
+          <button
+            onClick={() => navigate(`/teacher-assignment/${id}`)}
+            className="px-5 py-2 bg-black text-white hover:opacity-65 transition text-sm rounded-lg shadow-sm"
+          >
+            Back
+          </button>
+        </div>
       </div>
 
       <DeleteDialog

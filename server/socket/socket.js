@@ -3,6 +3,9 @@ import jwt from "jsonwebtoken";
 import cookie from "cookie"
 import { getMessageModel } from "../helper/getMessageModel.js";
 import { updateLastMessage } from "../controllers/conversationController.js";
+import chatbotConversationModel from "../models/chatbotConversationModel.js";
+import chatbotMessageModel from "../models/chatbotMessageModel.js";
+import { clearConversationCache, getChatbotReply } from "../services/chatbotService.js";
 
 export const setupSocket = (server) => {
   const io = new Server(server, {
@@ -112,6 +115,59 @@ export const setupSocket = (server) => {
         console.error("Error marking messages as read:", error);
       }
     })
+
+    // chatbot socket
+    socket.on("joinChatbot", () => {
+      socket.join(`chatbot-${socket.userId}`);
+    });
+
+    socket.on("chatbotMessage", async (msg) => {
+      if (!msg?.trim()) return;
+
+      try {
+        let conversation = await chatbotConversationModel.findOne({
+          user: socket.userId,
+        });
+        if (!conversation) {
+          conversation = await chatbotConversationModel.create({
+            user: socket.userId,
+            title: "Conversation with ChatBot",
+            lastMessage: "",
+            lastMessageAt: new Date(),
+          });
+        }
+
+        const userMessage = await chatbotMessageModel.create({
+          conversation: conversation._id,
+          senderType: "user",
+          text: msg,
+        });
+
+        clearConversationCache(socket.userId);
+
+        const replyText = await getChatbotReply(
+          socket.userId,
+          conversation._id,
+          msg
+        );
+
+        const botMessage = await chatbotMessageModel.create({
+          conversation: conversation._id,
+          senderType: "bot",
+          text: replyText,
+        });
+
+        conversation.lastMessage = replyText;
+        conversation.lastMessageAt = new Date();
+        await conversation.save();
+
+        io.to(`chatbot-${socket.userId}`).emit("receiveMessage", [
+          botMessage,
+        ]);
+      } catch (error) {
+        console.error("Chatbot socket error:", error);
+      }
+    });
 
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);

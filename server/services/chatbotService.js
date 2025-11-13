@@ -1,389 +1,420 @@
 import { Groq } from "groq-sdk";
-import CourseModel from "../models/courseModel.js";
 import AssignmentModel from "../models/assignmentModel.js";
+import chatbotMessageModel from "../models/chatbotMessageModel.js";
+import CourseModel from "../models/courseModel.js";
 import SubmissionModel from "../models/submissionModel.js";
 import UserModel from "../models/userModel.js";
 import { logError } from "../utils/logger.js";
 
-const groq = new Groq();
+const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-const normalize = (text = "") =>
-  text
-    .toString()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[đĐ]/g, "d")
-    .toLowerCase()
-    .trim();
+// Conversation Cache
+const conversationCache = new Map();
 
-const extractAfterKeyword = (raw, keywords) => {
-  const lower = normalize(raw);
-  for (const kw of keywords) {
-    const idx = lower.indexOf(normalize(kw));
-    if (idx !== -1) {
-      const sub = raw.slice(idx + kw.length).trim();
-      return sub.split(/[?.,!]/)[0].trim();
-    }
-  }
-  return null;
+// Normalize Text
+const normalize = (text = "") => text.toLowerCase().trim();
+
+// Language Detection
+const detectLanguage = (text = "") => {
+  const vietnameseChars =
+    /[àáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
+  if (vietnameseChars.test(text)) return "vi";
+
+  const enChars = text.replace(/[^a-zA-Z]/g, "").length;
+  const viChars = text.replace(/[a-zA-Z]/g, "").length;
+  return enChars >= viChars ? "en" : "vi";
 };
 
+// Conversation Context
+export const getConversationContext = async (userId, conversationId) => {
+  if (conversationCache.has(userId)) return conversationCache.get(userId);
+
+  const messages = await chatbotMessageModel
+    .find({ conversation: conversationId })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .lean();
+
+  const reversed = messages.reverse();
+  let langScore = { en: 0, vi: 0 };
+  reversed.forEach((m) => {
+    const lang = detectLanguage(m.text);
+    langScore[lang]++;
+  });
+  const dominantLang = langScore.en >= langScore.vi ? "en" : "vi";
+
+  const context = reversed
+    .map((m) => `[${m.senderType}]: ${m.text}`)
+    .join("\n");
+
+  const result = { context, language: dominantLang };
+  conversationCache.set(userId, result);
+  return result;
+};
+
+export const clearConversationCache = (userId) => {
+  conversationCache.delete(userId);
+};
+
+// Fuzzy Search Helpers
 const fuzzyFindUser = async (name, role) => {
   if (!name) return null;
   const re = new RegExp(name.trim(), "i");
-  let q = { name: re };
-  if (role) q.role = role;
-  let u = await UserModel.findOne(q).select("name role");
-  if (u) return u;
+  const user = await UserModel.findOne({ name: re, role }).select("name role");
+  if (user) return user;
+
+  // fallback fuzzy search
   const all = await UserModel.find(role ? { role } : {}).select("name role");
   const target = normalize(name);
-  for (const cand of all) {
-    if (normalize(cand.name).includes(target)) return cand;
-  }
-  return null;
+  return all.find((u) => normalize(u.name).includes(target)) || null;
 };
 
 const fuzzyFindCourse = async (name) => {
   if (!name) return null;
   const re = new RegExp(name.trim(), "i");
-  let c = await CourseModel.findOne({ name: re })
+  let course = await CourseModel.findOne({ name: re })
     .populate("teacherId", "name")
-    .populate("studentIds");
-  if (c) return c;
+    .populate({ path: "studentIds", select: "name _id" });
+
+  if (course) return course;
+
+  // fallback: normalize includes
   const all = await CourseModel.find()
     .populate("teacherId", "name")
-    .populate("studentIds");
+    .populate({ path: "studentIds", select: "name _id" });
   const target = normalize(name);
-  for (const cand of all) {
-    if (normalize(cand.name).includes(target)) return cand;
-  }
-  return null;
+  return all.find((c) => normalize(c.name).includes(target)) || null;
 };
 
 const fuzzyFindAssignment = async (title) => {
   if (!title) return null;
   const re = new RegExp(title.trim(), "i");
-  let a = await AssignmentModel.findOne({ title: re })
+  let assignment = await AssignmentModel.findOne({ title: re })
     .populate("createdBy", "name")
-    .populate("courseId", "name teacherId studentIds materials");
-  if (a) return a;
+    .populate({
+      path: "courseId",
+      select: "name teacherId studentIds materials",
+    });
+  if (assignment) return assignment;
+
   const all = await AssignmentModel.find()
     .populate("createdBy", "name")
-    .populate("courseId", "name teacherId studentIds materials");
+    .populate({
+      path: "courseId",
+      select: "name teacherId studentIds materials",
+    });
   const target = normalize(title);
-  for (const cand of all) {
-    if (normalize(cand.title).includes(target)) return cand;
-  }
-  return null;
+  return all.find((a) => normalize(a.title).includes(target)) || null;
 };
 
-export const getChatbotReply = async (messageText) => {
+// Analyze Query via GPT OSS
+const analyzeQuery = async (userId, messageText, conversationId) => {
   try {
-    const raw = (messageText || "").trim();
-    const lower = normalize(raw);
-    const isVietnamese =
-      /(bao nhieu|bao nhiêu|tổng|tong|giảng viên|giang vien|khóa học|khoa hoc|bài tập|baitap|sinh viên|sinhvien|nộp|nop|submission)/.test(
-        lower
-      );
-    const isCount =
-      /(how many|number of|bao nhieu|tong so|tổng số|có bao nhiêu|co bao nhieu|liệt kê|liet ke|danh sách|danhsach|list|show)/.test(
-        lower
-      );
-
-    const mentionsCourse = /(course|courses|khoa hoc|khoahoc)/i.test(lower);
-    const mentionsAssignment = /(assignment|assignments|bai tap|baitap)/i.test(
-      lower
-    );
-    const mentionsStudent = /(student|students|sinh vien|sinhvien)/i.test(
-      lower
-    );
-    const mentionsTeacher = /(teacher|lecturer|giang vien|giảng viên)/i.test(
-      lower
-    );
-    const mentionsSubmission = /(submission|submissions|nop bai|nộp bài)/i.test(
-      lower
+    const { context, language } = await getConversationContext(
+      userId,
+      conversationId
     );
 
-    if (isCount) {
-      if (mentionsCourse) {
-        const teacherName = extractAfterKeyword(raw, [
-          "giảng viên",
-          "teacher",
-          "lecturer",
-        ]);
-        if (teacherName) {
-          const teacher = await fuzzyFindUser(teacherName, "TEACHER");
-          if (!teacher)
-            return isVietnamese
-              ? `Không tìm thấy giảng viên ${teacherName}.`
-              : `Teacher ${teacherName} not found.`;
-          const count = await CourseModel.countDocuments({
-            teacherId: teacher._id,
-          });
-          return isVietnamese
-            ? `Giảng viên ${teacher.name} hiện có ${count} khóa học.`
-            : `Teacher ${teacher.name} currently has ${count} courses.`;
-        }
-        const total = await CourseModel.countDocuments();
-        return isVietnamese
-          ? `Tổng số khóa học trong hệ thống: ${total}.`
-          : `Total courses in the system: ${total}.`;
-      }
+    const prompt = `
+You are a bilingual study assistant (Vietnamese-English).
+Extract structured intent, entity, and filters from the user message.
+Return strictly JSON format: {"intent","entity","filters","language"} or null if it's small talk.
 
-      if (mentionsAssignment) {
-        const courseName = extractAfterKeyword(raw, [
-          "course",
-          "khoa hoc",
-          "trong khóa học",
-          "của khóa học",
-        ]);
-        if (courseName) {
-          const course = await fuzzyFindCourse(courseName);
-          if (!course)
-            return isVietnamese
-              ? `Không tìm thấy khóa học ${courseName}.`
-              : `Course ${courseName} not found.`;
-          const count = await AssignmentModel.countDocuments({
-            courseId: course._id,
-          });
-          return isVietnamese
-            ? `Khóa học ${course.name} có ${count} bài tập.`
-            : `Course ${course.name} has ${count} assignments.`;
-        }
-        const teacherName = extractAfterKeyword(raw, [
-          "giảng viên",
-          "teacher",
-          "lecturer",
-        ]);
-        if (teacherName) {
-          const teacher = await fuzzyFindUser(teacherName, "TEACHER");
-          if (!teacher)
-            return isVietnamese
-              ? `Không tìm thấy giảng viên ${teacherName}.`
-              : `Teacher ${teacherName} not found.`;
-          const courses = await CourseModel.find({ teacherId: teacher._id });
-          const ids = courses.map((c) => c._id);
-          const count = await AssignmentModel.countDocuments({
-            courseId: { $in: ids },
-          });
-          return isVietnamese
-            ? `Giảng viên ${teacher.name} có ${count} bài tập trong các khóa học họ dạy.`
-            : `Teacher ${teacher.name} has ${count} assignments across their courses.`;
-        }
-        const total = await AssignmentModel.countDocuments();
-        return isVietnamese
-          ? `Tổng số bài tập trong hệ thống: ${total}.`
-          : `Total assignments in the system: ${total}.`;
-      }
+Previous conversation:
+${context}
 
-      if (mentionsStudent) {
-        const courseName = extractAfterKeyword(raw, [
-          "course",
-          "khoa hoc",
-          "trong khóa học",
-          "của khóa học",
-        ]);
-        if (courseName) {
-          const course = await fuzzyFindCourse(courseName);
-          if (!course)
-            return isVietnamese
-              ? `Không tìm thấy khóa học ${courseName}.`
-              : `Course ${courseName} not found.`;
-          return isVietnamese
-            ? `Khóa học ${course.name} có ${
-                course.studentIds?.length || 0
-              } sinh viên.`
-            : `Course ${course.name} has ${
-                course.studentIds?.length || 0
-              } students.`;
-        }
-        const total = await UserModel.countDocuments({ role: "STUDENT" });
-        return isVietnamese
-          ? `Tổng số sinh viên trong hệ thống: ${total}.`
-          : `Total students in the system: ${total}.`;
-      }
+User asked: "${messageText}"
 
-      if (mentionsSubmission) {
-        const assignmentName = extractAfterKeyword(raw, [
-          "assignment",
-          "bai tap",
-        ]);
-        if (assignmentName && mentionsStudent) {
-          const assignment = await fuzzyFindAssignment(assignmentName);
-          if (!assignment)
-            return isVietnamese
-              ? `Không tìm thấy bài tập ${assignmentName}.`
-              : `Assignment ${assignmentName} not found.`;
-          const students = await SubmissionModel.distinct("student", {
-            assignment: assignment._id,
-          });
-          return isVietnamese
-            ? `Có ${students.length} sinh viên đã nộp bài "${assignment.title}".`
-            : `${students.length} students have submitted "${assignment.title}".`;
-        }
-        if (assignmentName) {
-          const assignment = await fuzzyFindAssignment(assignmentName);
-          const count = await SubmissionModel.countDocuments({
-            assignment: assignment._id,
-          });
-          return isVietnamese
-            ? `Bài tập "${assignment.title}" có ${count} lượt nộp.`
-            : `Assignment "${assignment.title}" has ${count} submissions.`;
-        }
-        const total = await SubmissionModel.countDocuments();
-        return isVietnamese
-          ? `Tổng số bài nộp trong hệ thống: ${total}.`
-          : `Total submissions in the system: ${total}.`;
-      }
-    }
+EXAMPLES:
+- "Giảng viên A dạy bao nhiêu khóa học?" -> {"intent": "count", "entity": "course", "filters": {"teacher": "Giảng viên A"}, "language": "vi"}
+- "list all students in Maths 101" -> {"intent": "list", "entity": "student", "filters": {"course": "Maths 101"}, "language": "en"}
+- "bài tập Lab 2 có bao nhiêu lượt nộp" -> {"intent": "count", "entity": "submission", "filters": {"assignment": "Lab 2"}, "language": "vi"}
 
-    if (mentionsCourse && /(ai day|who teach|who teaches)/i.test(lower)) {
-      const courseName = extractAfterKeyword(raw, [
-        "course",
-        "khoa hoc",
-        "trong khóa học",
-        "của khóa học",
-      ]);
-      if (courseName) {
-        const course = await fuzzyFindCourse(courseName);
-        if (!course)
-          return isVietnamese
-            ? `Không tìm thấy khóa học ${courseName}.`
-            : `Course ${courseName} not found.`;
-        return isVietnamese
-          ? `Khóa học ${course.name} do giảng viên ${course.teacherId?.name} phụ trách.`
-          : `Course ${course.name} is taught by ${course.teacherId?.name}.`;
-      }
-    }
+Respond only JSON.
+Prefer the user's message language or chat context language.
+`;
 
-    const teacherName = extractAfterKeyword(raw, [
-      "giảng viên",
-      "teacher",
-      "lecturer",
-    ]);
-    if (teacherName) {
-      const teacher = await fuzzyFindUser(teacherName, "TEACHER");
-      if (!teacher)
-        return isVietnamese
-          ? `Không tìm thấy giảng viên ${teacherName}.`
-          : `Teacher ${teacherName} not found.`;
-      const courses = await CourseModel.find({ teacherId: teacher._id });
-      if (!courses.length)
-        return isVietnamese
-          ? `Giảng viên ${teacher.name} chưa dạy khóa học nào.`
-          : `Teacher ${teacher.name} has no courses.`;
-      const list = courses.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
-      return isVietnamese
-        ? `Các khóa học của giảng viên ${teacher.name}:\n${list}`
-        : `Courses taught by ${teacher.name}:\n${list}`;
-    }
+    const completion = await groqClient.chat.completions.create({
+      model: "openai/gpt-oss-120b",
+      messages: [
+        { role: "system", content: "You are a structured data extractor." },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.2,
+      max_completion_tokens: 350,
+    });
 
-    const courseName = extractAfterKeyword(raw, [
-      "course",
-      "khoa hoc",
-      "trong khóa học",
-      "của khóa học",
-    ]);
-    if (courseName) {
-      const course = await fuzzyFindCourse(courseName);
-      if (!course)
-        return isVietnamese
-          ? `Không tìm thấy khóa học ${courseName}.`
-          : `Course ${courseName} not found.`;
-      const assignments = await AssignmentModel.find({ courseId: course._id });
-      const assignText = assignments.length
-        ? assignments.map((a, i) => `${i + 1}. ${a.title}`).join("\n")
-        : isVietnamese
-        ? "Không có bài tập."
-        : "No assignments.";
-      return isVietnamese
-        ? `Khóa học: ${course.name}\nGiảng viên: ${
-            course.teacherId?.name
-          }\nSố sinh viên: ${
-            course.studentIds?.length || 0
-          }\nBài tập:\n${assignText}`
-        : `Course: ${course.name}\nTeacher: ${
-            course.teacherId?.name
-          }\nStudents: ${
-            course.studentIds?.length || 0
-          }\nAssignments:\n${assignText}`;
-    }
-
-    const assignmentName = extractAfterKeyword(raw, ["assignment", "bai tap"]);
-    if (assignmentName) {
-      const assignment = await fuzzyFindAssignment(assignmentName);
-      if (!assignment)
-        return isVietnamese
-          ? `Không tìm thấy bài tập ${assignmentName}.`
-          : `Assignment ${assignmentName} not found.`;
-      const count = await SubmissionModel.countDocuments({
-        assignment: assignment._id,
-      });
-      return isVietnamese
-        ? `Bài tập: ${assignment.title}\nKhóa học: ${
-            assignment.courseId?.name
-          }\nGiảng viên: ${assignment.courseId?.teacherId?.name}\nHạn nộp: ${
-            assignment.dueDate?.toLocaleString() || "N/A"
-          }\nSố lượt nộp: ${count}`
-        : `Assignment: ${assignment.title}\nCourse: ${
-            assignment.courseId?.name
-          }\nTeacher: ${assignment.courseId?.teacherId?.name}\nDue: ${
-            assignment.dueDate?.toLocaleString() || "N/A"
-          }\nSubmissions: ${count}`;
-    }
-
-    const studentName = extractAfterKeyword(raw, [
-      "student",
-      "sinh vien",
-      "sinhvien",
-    ]);
-    if (studentName) {
-      const student = await fuzzyFindUser(studentName, "STUDENT");
-      if (!student)
-        return isVietnamese
-          ? `Không tìm thấy sinh viên ${studentName}.`
-          : `Student ${studentName} not found.`;
-      const subs = await SubmissionModel.find({
-        student: student._id,
-      }).populate("assignment", "title");
-      if (!subs.length)
-        return isVietnamese
-          ? `Sinh viên ${student.name} chưa nộp bài nào.`
-          : `Student ${student.name} has no submissions.`;
-      const list = subs
-        .map(
-          (s, i) =>
-            `${i + 1}. ${s.assignment?.title || "N/A"} - ${s.status || "N/A"}`
-        )
-        .join("\n");
-      return isVietnamese
-        ? `Các bài đã nộp của ${student.name}:\n${list}`
-        : `Submissions of ${student.name}:\n${list}`;
-    }
-
-    return await (async () => {
-      const chatCompletion = await groq.chat.completions.create({
-        model: "openai/gpt-oss-20b",
-        messages: [
-          {
-            role: "system",
-            content: `You are an AI assistant for a learning system. Only answer based on the provided system data. Respond in the same language as the user.`,
-          },
-          { role: "user", content: raw },
-        ],
-        temperature: 0.6,
-        max_completion_tokens: 1500,
-      });
-
-      const gptReply = chatCompletion.choices?.[0]?.message?.content?.trim();
-      if (gptReply) return gptReply;
-
-      return isVietnamese
-        ? "Vui lòng cung cấp rõ tên khóa học, bài tập, giảng viên hoặc sinh viên để tôi có thể trả lời chính xác hơn."
-        : "Please provide a specific course, assignment, teacher or student name for a more accurate answer.";
-    })();
+    const text = completion.choices[0]?.message?.content || "{}";
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
   } catch (err) {
     logError(err);
-    throw new Error("Chatbot internal error");
+    return null;
+  }
+};
+
+// Query MongoDB Based on Parsed JSON
+const queryDB = async (parsed, detectedLang = "en") => {
+  if (!parsed) return null;
+  const { intent, entity, filters, language } = parsed;
+  const lang = language || detectedLang;
+  const t = (vi, en) => (lang === "vi" ? vi : en || vi);
+
+  try {
+    // COUNT queries
+    if (intent === "count" || intent === "info") {
+      // Teacher courses
+      if ((entity === "course" || entity === "teacher") && filters?.teacher) {
+        const teacher = await fuzzyFindUser(filters.teacher, "TEACHER");
+        if (!teacher)
+          return t(
+            `Không tìm thấy giảng viên ${filters.teacher}.`,
+            `Teacher ${filters.teacher} not found.`
+          );
+        const courseCount = await CourseModel.countDocuments({
+          teacherId: teacher._id,
+        });
+        return t(
+          `Giảng viên ${teacher.name} có ${courseCount} khóa học.`,
+          `Teacher ${teacher.name} has ${courseCount} courses.`
+        );
+      }
+
+      // All courses
+      if (
+        entity === "course" &&
+        (!filters || Object.keys(filters).length === 0)
+      ) {
+        const totalCourses = await CourseModel.countDocuments({});
+        return t(
+          `Hiện có tổng cộng ${totalCourses} khóa học trong hệ thống.`,
+          `There are currently ${totalCourses} courses in the system.`
+        );
+      }
+
+      // Assignment counts
+      if (entity === "assignment") {
+        if (!filters?.course) {
+          const assignmentCount = await AssignmentModel.countDocuments({});
+          return t(
+            `Hiện có tổng cộng ${assignmentCount} bài tập trong hệ thống.`,
+            `There are currently ${assignmentCount} assignments in the system.`
+          );
+        }
+        const course = await fuzzyFindCourse(filters.course);
+        if (!course)
+          return t(
+            `Khóa học ${filters.course} không tồn tại.`,
+            `Course ${filters.course} not found.`
+          );
+        const assignmentCount = await AssignmentModel.countDocuments({
+          courseId: course._id,
+        });
+        return t(
+          `Khóa học ${course.name} có ${assignmentCount} bài tập.`,
+          `Course ${course.name} has ${assignmentCount} assignments.`
+        );
+      }
+
+      // Submission counts
+      if (entity === "submission") {
+        if (!filters?.assignment)
+          return t(
+            `Cần chỉ định bài tập để đếm lượt nộp.`,
+            `Assignment must be specified to count submissions.`
+          );
+        const assignment = await fuzzyFindAssignment(filters.assignment);
+        if (!assignment)
+          return t(
+            `Bài tập ${filters.assignment} không tồn tại.`,
+            `Assignment ${filters.assignment} not found.`
+          );
+
+        // Check course if provided
+        if (filters.course) {
+          const course = await fuzzyFindCourse(filters.course);
+          if (!course)
+            return t(
+              `Khóa học ${filters.course} không tồn tại.`,
+              `Course ${filters.course} not found.`
+            );
+          if (assignment.courseId._id.toString() !== course._id.toString()) {
+            return t(
+              `Bài tập ${assignment.title} không thuộc khóa học ${course.name}.`,
+              `Assignment ${assignment.title} does not belong to course ${course.name}.`
+            );
+          }
+        }
+
+        const submissionCount = await SubmissionModel.countDocuments({
+          assignment: assignment._id,
+        });
+        return t(
+          `Bài tập "${assignment.title}" có ${submissionCount} lượt nộp.`,
+          `Assignment "${assignment.title}" has ${submissionCount} submissions.`
+        );
+      }
+
+      // Student counts
+      if (entity === "student" && filters?.course) {
+        const course = await fuzzyFindCourse(filters.course);
+        if (!course)
+          return t(
+            `Khóa học ${filters.course} không tồn tại.`,
+            `Course ${filters.course} not found.`
+          );
+        return t(
+          `Có ${course.studentIds.length} sinh viên trong khóa học ${course.name}.`,
+          `There are ${course.studentIds.length} students in course ${course.name}.`
+        );
+      }
+    }
+
+    // LIST queries
+    if (intent === "list") {
+      // Assignments in a course
+      if (entity === "assignment" && filters?.course) {
+        const course = await fuzzyFindCourse(filters.course);
+        if (!course)
+          return t(
+            `Khóa học ${filters.course} không tồn tại.`,
+            `Course ${filters.course} not found.`
+          );
+        const assignments = await AssignmentModel.find({
+          courseId: course._id,
+        });
+        const list = assignments
+          .map((a, i) => `${i + 1}. ${a.title}`)
+          .join("\n");
+        return t(
+          `Danh sách bài tập trong khóa học ${course.name}:\n${list}`,
+          `Assignments in course ${course.name}:\n${list}`
+        );
+      }
+
+      // Courses of a teacher
+      if (entity === "course" && filters?.teacher) {
+        const teacher = await fuzzyFindUser(filters.teacher, "TEACHER");
+        if (!teacher)
+          return t(
+            `Không tìm thấy giảng viên ${filters.teacher}.`,
+            `Teacher ${filters.teacher} not found.`
+          );
+        const courses = await CourseModel.find({ teacherId: teacher._id });
+        const list = courses
+          .map(
+            (c, i) =>
+              `${i + 1}. ${c.name} - ${c.description || "No description"}`
+          )
+          .join("\n");
+        return t(
+          `Các khóa học của giảng viên ${teacher.name}:\n${list}`,
+          `Courses of teacher ${teacher.name}:\n${list}`
+        );
+      }
+
+      // Students in a course
+      if (entity === "student" && filters?.course) {
+        const course = await fuzzyFindCourse(filters.course);
+        if (!course)
+          return t(
+            `Khóa học ${filters.course} không tồn tại.`,
+            `Course ${filters.course} not found.`
+          );
+
+        // Specific student check
+        if (filters.student) {
+          const student = course.studentIds.find(
+            (s) => normalize(s.name) === normalize(filters.student)
+          );
+          return student
+            ? t(
+                `Sinh viên ${student.name} có trong khóa học ${course.name}.`,
+                `Student ${student.name} is enrolled in ${course.name}.`
+              )
+            : t(
+                `Sinh viên ${filters.student} không có trong khóa học ${course.name}.`,
+                `Student ${filters.student} is not enrolled in ${course.name}.`
+              );
+        }
+
+        return t(
+          `Có ${course.studentIds.length} sinh viên trong khóa học ${course.name}.`,
+          `There are ${course.studentIds.length} students in course ${course.name}.`
+        );
+      }
+    }
+
+    // Assignment guidance
+    if (
+      intent === "assignment_guidance" &&
+      entity === "assignment" &&
+      filters?.assignment
+    ) {
+      return t(
+        `Bạn có thể thử giải bài tập "${filters.assignment}" bằng cách phân tích yêu cầu và áp dụng kiến thức đã học.`,
+        `You can try solving assignment "${filters.assignment}" by analyzing the requirements and applying learned concepts.`
+      );
+    }
+
+    return null;
+  } catch (err) {
+    logError(err);
+    return null;
+  }
+};
+
+// Main Chatbot Reply Function
+export const getChatbotReply = async (userId, conversationId, messageText) => {
+  try {
+    const userLang = detectLanguage(messageText);
+
+    // Extract structured intent/entity/filters
+    const parsed = await analyzeQuery(userId, messageText, conversationId);
+
+    // Query database for structured answers
+    const dbReply = await queryDB(parsed, userLang);
+    if (dbReply) return dbReply;
+
+    // Fallback GPT for guidance / small talk
+    const { context } = await getConversationContext(userId, conversationId);
+    const prompt = `
+${context}
+User asked: "${messageText}"
+
+Rules:
+- Never provide direct answers to assignments.
+- Only give hints, guidance, or explanations.
+- Answer concisely in ${userLang === "vi" ? "Vietnamese" : "English"}.
+`;
+
+    const fallbackResp = await groqClient.chat.completions.create({
+      model: "openai/gpt-oss-120b",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a helpful study assistant. Answer clearly and concisely.",
+        },
+        { role: "user", content: prompt },
+      ],
+      temperature: 0.3,
+      max_completion_tokens: 250,
+    });
+
+    const textResp = fallbackResp.choices[0]?.message?.content;
+
+    if (!textResp)
+      return userLang === "vi"
+        ? "Xin lỗi, tôi không thể trả lời câu hỏi này."
+        : "Sorry, I cannot answer this question.";
+
+    return textResp;
+  } catch (err) {
+    logError(err);
+    return userLang === "vi"
+      ? "Lỗi nội bộ Chatbot."
+      : "Chatbot internal error.";
   }
 };

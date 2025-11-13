@@ -102,7 +102,7 @@ export default function TeachersSubmissionPage() {
                         onClick={() =>
                           navigate(`/teacher-submissions-student/${sub._id}`)
                         }
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-blue-600 hover:text-blue-800 cursor-pointer"
                       >
                         <Eye className="inline w-5 h-5" />
                       </button>

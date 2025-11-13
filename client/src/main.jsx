@@ -27,6 +27,7 @@ import TeacherSubmissionStudentPage from "./pages/dashboard/TeacherSubmissionStu
 import TeacherEnrolledStudent from "./pages/dashboard/TeacherEnrolledStudent";
 import TeacherEnrolStudent from "./pages/dashboard/TeacherEnrolStudent";
 import ConversationsPage from "./pages/dashboard/ConversationsPage";
+import ChatBotPage from "./pages/dashboard/ChatBotPage";
 
 const root = createBrowserRouter([
   {
@@ -42,19 +43,35 @@ const root = createBrowserRouter([
       },
       {
         path: "/assignments",
-        element: <AssignmentPage />,
+        element: (
+          <ProtectedRoute allowedRoles={["STUDENT"]}>
+            <AssignmentPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "/course/:id",
-        element: <CourseDetail />,
+        element: (
+          <ProtectedRoute allowedRoles={["STUDENT"]}>
+            <CourseDetail />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "/assignment/:id",
-        element: <AssignmentDetail />,
+        element: (
+          <ProtectedRoute allowedRoles={["STUDENT"]}>
+            <AssignmentDetail />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "/my-submissions",
-        element: <SubmissionsPage />,
+        element: (
+          <ProtectedRoute allowedRoles={["STUDENT"]}>
+            <SubmissionsPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "/profile",
@@ -62,7 +79,11 @@ const root = createBrowserRouter([
       },
       {
         path: "/teachers",
-        element: <TeachersPage />,
+        element: (
+          <ProtectedRoute allowedRoles={["STUDENT"]}>
+            <TeachersPage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "/conversations",
@@ -70,7 +91,11 @@ const root = createBrowserRouter([
       },
       {
         path: "/plagiarism-report/:id",
-        element: <PlagiarismReport />,
+        element: (
+          <ProtectedRoute allowedRoles={["STUDENT"]}>
+            <PlagiarismReport />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "/teacher-courses",
@@ -119,6 +144,10 @@ const root = createBrowserRouter([
             <TeacherEnrolStudent />
           </ProtectedRoute>
         ),
+      },
+      {
+        path: "/chatbot-ai",
+        element: <ChatBotPage />,
       },
     ],
   },
