@@ -43,6 +43,11 @@ const Sidebar = () => {
       icon: <GraduationCap className="size-4" />,
     },
     { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
+    {
+      name: "Conversations",
+      path: "/conversations",
+      icon: <MessageCircleMore className="size-4" />,
+    },
   ];
 
   const studentMenu = [

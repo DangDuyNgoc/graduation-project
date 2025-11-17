@@ -27,6 +27,7 @@ export const checkPlagiarismController = async (req, res) => {
     }
 
     const files = data.files || [];
+    console.log("file", files);
     if (files.length === 0) {
       return res.status(404).json({
         success: false,
@@ -52,13 +53,13 @@ export const checkPlagiarismController = async (req, res) => {
     const overallSimilarity =
       mappedFiles.length > 0
         ? Number(
-            (
-              mappedFiles.reduce(
-                (sum, f) => sum + (f.similarityScore || 0),
-                0
-              ) / mappedFiles.length
-            ).toFixed(4)
-          )
+          (
+            mappedFiles.reduce(
+              (sum, f) => sum + (f.similarityScore || 0),
+              0
+            ) / mappedFiles.length
+          ).toFixed(4)
+        )
         : 0;
 
     // check if a plagiarism report already exists

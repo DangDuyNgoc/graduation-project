@@ -64,6 +64,7 @@ export default function AssignmentList({ courseId }) {
         toast.error(res.message || "Failed to delete assignment");
       }
     } catch (err) {
+      console.log("Error deleting assignment", err);
       toast.error("Error deleting assignment");
     } finally {
       setLoadingDelete(false);

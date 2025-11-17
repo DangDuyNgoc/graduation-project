@@ -23,7 +23,22 @@ const messageSchema = new mongoose.Schema({
     ],
     readBy: [
         { type: mongoose.Types.ObjectId, ref: "user" }
-    ]
+    ],
+    isEdited: {
+        type: Boolean,
+        default: false,
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false,
+    },
+    deletedBy: {
+        type: mongoose.Types.ObjectId,
+        ref: "user"
+    },
+    deletedByName: {
+        type: String
+    }
 }, { timestamps: true });
 
 messageSchema.index({ conversation: 1, createdAt: -1 });

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useContext } from "react";
 import { Input } from "../ui/input";
 import Picker from "emoji-picker-react";
-import { Smile, Paperclip, X } from "lucide-react";
+import { Smile, Paperclip, X, MoreVertical } from "lucide-react";
 import { getSocket } from "@/utils/socket";
 import api from "@/utils/axiosInstance";
 import { Avatar, AvatarImage } from "@radix-ui/react-avatar";
@@ -11,7 +11,7 @@ import { formatExactTime, getTimeAgo } from "@/utils/timeFormatter";
 const ChatView = ({
   conversationId,
   isOpen,
-  teacher,
+  chatInfo,
   onClose,
   isOpenChatView = true,
 }) => {
@@ -24,17 +24,19 @@ const ChatView = ({
   const [typingUsers, setTypingUsers] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(null);
+  const [editMessageId, setEditMessageId] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editText, setEditText] = useState("");
 
   const typingTimeout = useRef(null);
 
   const socket = getSocket();
-  console.log("current user: ", user._id);
 
   const fetchMessage = async () => {
     try {
       const { data } = await api.get(`/message/get-message/${conversationId}`);
       if (data.success) {
-        console.log("message sender id: ", data.messages.sender);
         setMessages(data.messages.reverse());
       }
     } catch (error) {
@@ -80,6 +82,31 @@ const ChatView = ({
       setTypingUsers((prev) => prev.filter((id) => id !== userId));
     });
 
+    // edit message
+    socket.on("messageEdited", (updatedMessage) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === updatedMessage._id ? { ...msg, ...updatedMessage } : msg
+        )
+      );
+    });
+
+    // delete message
+    socket.on("messageDeleted", (updated) => {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id.toString() === updated._id.toString()
+            ? {
+                ...msg,
+                text: updated.text,
+                isDeleted: true,
+                attachments: [],
+              }
+            : msg
+        )
+      );
+    });
+
     // cleanup
     return () => {
       socket.emit("leaveConversation", conversationId);
@@ -87,6 +114,8 @@ const ChatView = ({
       socket.off("userTyping");
       socket.off("userStopTyping");
       socket.off("messageRead");
+      socket.off("messageEdited");
+      socket.off("messageDeleted");
     };
   }, [conversationId]);
 
@@ -119,7 +148,6 @@ const ChatView = ({
         });
 
         if (data.success) {
-          socket.emit("receiveMessage", data.newMessage);
           setMessages((prev) => [...prev, data.newMessage]);
         }
       } else {
@@ -140,7 +168,9 @@ const ChatView = ({
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSendMessage();
+      if (editingMessage) {
+        handleSaveEdit();
+      } else handleSendMessage();
     } else {
       handleTyping();
     }
@@ -169,6 +199,47 @@ const ChatView = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleEditMessage = (msg) => {
+    setMenuOpen(null);
+    setEditMessageId(msg._id);
+    setEditingMessage(msg);
+    setInput(msg.text);
+    setEditText(msg.text || "");
+    inputRef.current.focus();
+  };
+
+  const handleSaveEdit = () => {
+    const textToSave = editText || input;
+    if (!textToSave.trim()) return;
+
+    socket.emit("editMessage", {
+      messageId: editMessageId,
+      newText: input,
+      conversationId,
+    });
+
+    setEditMessageId(null);
+    setEditingMessage(null);
+    setEditText("");
+    setInput("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditMessageId(null);
+    setEditingMessage(null);
+    setEditText("");
+    setInput("");
+  };
+
+  const handleDeleteMessage = (msg) => {
+    setMenuOpen(null);
+    try {
+      socket.emit("deleteMessage", { messageId: msg._id });
+    } catch (error) {
+      console.error("Error deleting message: ", error);
+    }
+  };
 
   const handleTyping = () => {
     if (!isTyping) {
@@ -214,6 +285,16 @@ const ChatView = ({
     setDragActive(true);
   };
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuOpen && !e.target.closest(".message-menu")) {
+        setMenuOpen(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -233,14 +314,14 @@ const ChatView = ({
           <Avatar className="w-20 h-20">
             <AvatarImage
               src={
-                teacher?.avatar?.url ||
+                chatInfo?.avatar?.url ||
                 "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
               }
               alt="avatar image"
             />
           </Avatar>
         </div>
-        <h3 className="font-semibold flex-1 text-sm">{teacher.name}</h3>
+        <h3 className="font-semibold flex-1 text-sm">{chatInfo.name}</h3>
         <button
           onClick={onClose}
           className="text-white hover:text-gray-200 mr-4"
@@ -250,17 +331,22 @@ const ChatView = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 p-4 overflow-y-auto relative">
+      <div
+        className={`flex-1 p-4 overflow-y-auto relative ${
+          editingMessage ? "filter blur-sm pointer-events-none" : ""
+        } ${chatInfo.isGroup && "mt-6"}`}
+      >
         {messages.map((msg, index) => {
           const isMine = msg.sender?._id?.toString?.() === user._id?.toString();
           const isLastMessage = index === messages.length - 1;
+          const senderName = !isMine ? msg?.sender?.name : null;
 
           return (
             <div
-              key={index}
-              className={`mb-2 flex ${
+              key={msg._id}
+              className={`flex ${
                 isMine ? "justify-end" : "justify-start"
-              }`}
+              } relative ${chatInfo.isGroup && !isMine ? "mb-10" : "mb-2"}`}
             >
               {/* Avatar */}
               {!isMine && (
@@ -268,7 +354,7 @@ const ChatView = ({
                   <Avatar className="w-full h-full">
                     <AvatarImage
                       src={
-                        teacher?.avatar?.url ||
+                        msg.sender?.avatar?.url ||
                         "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
                       }
                       alt={msg.sender?.name || "avatar"}
@@ -277,17 +363,27 @@ const ChatView = ({
                 </div>
               )}
 
+              {!isMine && (
+                <div className="absolute -top-5 left-8 z-10 text-xs font-semibold text-gray-600 mb-0.5">
+                  {senderName}
+                </div>
+              )}
+
               <div
                 title={formatExactTime(msg.createdAt)}
-                className={`inline-block text-sm p-2 rounded-lg max-w-[70%] break-words ${
+                className={`relative group inline-block text-sm rounded-lg max-w-[70%] break-all transition-colors ${
                   isMine ? "text-white" : "bg-gray-200 text-black"
                 }`}
               >
                 {/* text message */}
-                {msg.text && (
+                {msg.isDeleted ? (
+                  <p className="italic text-gray-400 text-sm border border-gray-200 rounded-full p-2">
+                    {msg.text}
+                  </p>
+                ) : (
                   <p
                     className={`${
-                      isMine ? "bg-blue-500 p-1" : "bg-gray-200 p-1"
+                      isMine ? "bg-blue-500 p-2" : "bg-gray-200 p-2"
                     } mb-1 rounded-full`}
                   >
                     {msg.text}
@@ -352,6 +448,42 @@ const ChatView = ({
                     ) : null}
                   </div>
                 )}
+
+                {/* show option when hovering */}
+                {isMine && (
+                  <div className="absolute top-2 -left-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="relative">
+                      <button
+                        onClick={() =>
+                          setMenuOpen((prev) =>
+                            prev === msg._id ? null : msg._id
+                          )
+                        }
+                        className="p-1 rounded-full hover:opacity-100 opacity-70 bg-white/70 hover:bg-gray-200 shadow-sm"
+                      >
+                        <MoreVertical color="#766f6f" size={16} />
+                      </button>
+
+                      {/* dropdown menu */}
+                      {menuOpen === msg._id && (
+                        <div className="message-menu absolute top-full right-0 mt-1 bg-white shadow-md rounded-lg border w-28 text-black z-10">
+                          <button
+                            onClick={() => handleEditMessage(msg)}
+                            className="block w-full text-left px-3 py-1 hover:bg-gray-100"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteMessage(msg)}
+                            className="block w-full text-left px-3 py-1 hover:bg-gray-100 text-red-500"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -365,7 +497,7 @@ const ChatView = ({
                 <Avatar className="w-full h-full">
                   <AvatarImage
                     src={
-                      teacher?.avatar?.url ||
+                      messages?.avatar?.url ||
                       "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
                     }
                     alt="avatar image"
@@ -457,9 +589,21 @@ const ChatView = ({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Type message......"
-            className="pl-9 pr-6 flex-1 rounded-full"
+            placeholder={
+              editingMessage ? "Editing message..." : "Type message......"
+            }
+            className="pl-9 pr-6 flex-1 rounded-full break-all"
           />
+
+          {/* cancel edit button */}
+          {editingMessage && (
+            <button
+              onClick={handleCancelEdit}
+              className="absolute right-0 top-1/2 transform -translate-y-1/2 text-red-500 px-2"
+            >
+              Cancel
+            </button>
+          )}
 
           {/* Emoji Button */}
           <button

@@ -1,12 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { UserContext } from "./UserContext.js";
-import api, { setUpInterceptors } from "@/utils/axiosInstance.js";
-import { LoaderCircle } from "lucide-react";
+import { setUpInterceptors } from "@/utils/axiosInstance.js";
 
 const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
 
   // update user data
   const updateUser = (userData) => {
@@ -18,28 +15,9 @@ const UserProvider = ({ children }) => {
     setUser(null);
   };
 
-  // get user from cookie
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const { data } = await api.get("/user/me");
-        setUser(data.user);
-      } catch (error) {
-        console.log("No user logged in", error);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUser();
-  }, []);
-
   useEffect(() => {
     setUpInterceptors({ clearData });
   }, []);
-
-  if (loading)
-    return <LoaderCircle className="size-8 animate-spin text-primary" />;
 
   return (
     <UserContext.Provider

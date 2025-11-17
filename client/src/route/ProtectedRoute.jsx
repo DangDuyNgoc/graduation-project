@@ -5,7 +5,7 @@ import { useContext } from "react";
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user } = useContext(UserContext);
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/login" />;
 
   // check user role
   if (allowedRoles && !allowedRoles.includes(user.role)) {

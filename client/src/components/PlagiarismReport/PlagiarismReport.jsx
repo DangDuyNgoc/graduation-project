@@ -43,30 +43,6 @@ function PlagiarismReport() {
     fetchReport();
   }, [id]);
 
-  const handleCheckPlagiarism = async () => {
-    setLoading(true);
-    try {
-      toast.loading("Checking plagiarism...", { id: "plagiarism_check" });
-      const { data } = await api.get(`/plagiarism/check-plagiarism/${id}`, {
-        withCredentials: true,
-      });
-      toast.dismiss("plagiarism_check");
-      if (data.success) {
-        setReport(data.report);
-        toast.success("Plagiarism check completed", { id: "plagiarism_check" });
-      } else {
-        toast.error(data.message || "Plagiarism check failed", {
-          id: "plagiarism_check",
-        });
-      }
-    } catch (error) {
-      console.log(error);
-      toast.error("Failed to check plagiarism", { id: "plagiarism_check" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (loading) {
     return (
       <DashboardLayout>
@@ -100,9 +76,6 @@ function PlagiarismReport() {
           </span>
         </p>
 
-        {/* {isOverThreshold && (
-          <Button onClick={handleCheckPlagiarism}>Check Again</Button>
-        )} */}
         <Button onClick={() => navigate(-1)}>Go Back</Button>
 
         <div className="border-t pt-4 space-y-6">

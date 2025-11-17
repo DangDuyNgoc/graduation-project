@@ -68,7 +68,10 @@ export default function TeachersSubmissionPage() {
                     <td className="p-3">{index + 1}</td>
                     <td className="p-3 flex items-center gap-2">
                       <img
-                        src={sub.student?.avatar?.url}
+                        src={
+                          sub.student?.avatar?.url ||
+                          "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
+                        }
                         alt="avatar"
                         className="w-8 h-8 rounded-full object-cover"
                       />

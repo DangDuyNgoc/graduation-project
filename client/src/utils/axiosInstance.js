@@ -32,8 +32,9 @@ export const setUpInterceptors = ({ clearData }) => {
                     return new Promise((resolve, reject) => {
                         failedQueue.push({ resolve, reject });
                     })
-                        .then(() => {
-                            api(originalRequest);
+                        .then((token) => {
+                            originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                            return api(originalRequest);
                         })
                         .catch((error) => Promise.reject(error));
                 }
@@ -44,8 +45,14 @@ export const setUpInterceptors = ({ clearData }) => {
                 try {
                     const res = await api.get("/user/refresh-token");
                     if (res?.data?.success) {
-                        processQueue(null);
+                        const newToken = res.data.accessToken;
+                        // set token into headers
+                        api.defaults.headers.common["Authorization"] = `Bearer ${newToken}`;
+                        originalRequest.headers["Authorization"] = `Bearer ${newToken}`;
+                        processQueue(null, newToken);
+
                         isRefreshing = false;
+
                         return api(originalRequest);
                     }
                 } catch (error) {

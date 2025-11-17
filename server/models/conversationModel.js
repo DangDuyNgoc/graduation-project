@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 
 const conversationSchema = new mongoose.Schema({
+    course: {
+        type: mongoose.Types.ObjectId,
+        ref: "course"
+    },
     name: {
         type: String,
     },
@@ -36,6 +40,12 @@ const conversationSchema = new mongoose.Schema({
             count: { type: Number, default: 0 },
         },
     ],
+    deletedFor: [
+        {
+            type: mongoose.Types.ObjectId,
+            ref: "user"
+        }
+    ]
 }, { timestamps: true });
 
 conversationSchema.index({ participants: 1 });

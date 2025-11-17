@@ -157,6 +157,9 @@ export const uploadSubmissionController = async (req, res) => {
         contentHash
       );
       await tx.wait(); // wait for transaction to be mined
+
+      submission.blockchainTxHash = tx.hash;
+      await submission.save();
     } catch (error) {
       console.error("Error storing submission on blockchain:", error);
     }
@@ -330,6 +333,9 @@ export const updateSubmissionController = async (req, res) => {
       submission.contentHash
     );
     await tx.wait(); // wait for transaction to be mined
+
+    submission.blockchainTxHash = tx.hash;
+    await submission.save();
   } catch (error) {
     console.error("Error storing submission on blockchain:", error);
   }
@@ -549,21 +555,30 @@ export const getStudentSubmissionsController = async (req, res) => {
       }
     }
 
+    const PlagiarismReport = await PlagiarismReportModel.find({
+      submissionId: { $in: submission.map(s => s._id) }
+    })
+
     // gross material to sub submission object
-    const submissionsWithMaterials = submission.map((sub) => {
+    const submissionsWithData = submission.map((sub) => {
       const matchedMaterials = materials.filter(
         (mat) => mat.submissionId === sub._id.toString()
+      );
+
+      const matchedReport = PlagiarismReport.find(
+        (rep) => rep.submissionId.toString() === sub._id.toString()
       );
       return {
         ...sub.toObject(),
         materials: matchedMaterials,
+        plagiarismScore: matchedReport?.similarityScore ?? null,
       };
     });
 
     return res.status(200).send({
       success: true,
       message: "Fetched get all submission by student id successfully",
-      submissions: submissionsWithMaterials,
+      submissions: submissionsWithData,
     });
   } catch (error) {
     console.log("Error in get all submissions by student id: ", error);

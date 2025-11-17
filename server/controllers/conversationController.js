@@ -3,7 +3,7 @@ import conversationModel from "../models/conversationModel.js";
 
 export const createOrGetConversation = async (req, res) => {
     try {
-        const { participants, isGroup, name, adminId } = req.body;
+        const { participants, isGroup, name, adminId, courseId } = req.body;
 
         if (!participants || !Array.isArray(participants) || participants.length < 2) {
             return res.status(400).send({
@@ -21,7 +21,8 @@ export const createOrGetConversation = async (req, res) => {
                 name: name || "New Group",
                 isGroup: true,
                 participants: participantsIds,
-                groupAdmin: adminId
+                groupAdmin: adminId,
+                course: courseId,
             });
 
             return res.status(200).send({
@@ -71,7 +72,8 @@ export const getAllUserConversations = async (req, res) => {
     try {
         const { userId } = req.params;
         const conversations = await conversationModel.find({
-            participants: userId
+            participants: userId,
+            deletedFor: { $ne: userId }
         })
             .populate("participants", "name email role avatar")
             .populate("lastMessage", "text attachments createdAt")
@@ -106,7 +108,7 @@ export const getOneConversationController = async (req, res) => {
         const conversation = await conversationModel.findById(conversationId)
             .populate("participants", "name email role avatar")
             .populate("groupAdmin", "name")
-            .lean()
+            .lean();
 
         if (!conversation) {
             return res.status(404).json({
@@ -139,12 +141,10 @@ export const getOneConversationController = async (req, res) => {
     }
 }
 
-export const updateLastMessage = async (conversationId, text, attachments, senderId, participants) => {
+export const updateLastMessage = async (conversationId, text, attachments, senderId) => {
     try {
         const conversation = await conversationModel.findById(conversationId).lean();
         if (!conversation) return;
-
-        const participants = conversation.participants;
 
         await conversationModel.findByIdAndUpdate(conversationId, {
             lastMessage: text || (attachments?.length ? "attached files" : ""),
@@ -157,3 +157,92 @@ export const updateLastMessage = async (conversationId, text, attachments, sende
     }
 };
 
+export const deleteConversationForUserController = async (req, res) => {
+    try {
+        const { conversationId } = req.params;
+        const userId = req.user._id;
+
+        if (!conversationId) {
+            return res.status(404).send({
+                success: false,
+                message: "Conversation not found",
+            });
+        }
+
+        const conversation = await conversationModel.findById(conversationId);
+
+        if (!conversation) {
+            return res.status(400).send({
+                success: false,
+                message: "Please provide conversation id",
+            });
+        };
+
+        // check if the user join the conversation
+        if (!conversation.participants.includes(userId)) {
+            return res.status(403).send({
+                success: false,
+                message: "You are not part of this conversation",
+            });
+        };
+
+        if (!conversation.deletedFor.includes(userId)) {
+            conversation.deletedFor.push(userId);
+            await conversation.save();
+        }
+
+        return res.status(200).send({
+            success: true,
+            message: "Conversation deleted for you successfully"
+        });
+    } catch (error) {
+        console.log("Error in delete conversation for user: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
+export const getConversationByCourseController = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+
+        if (!courseId) {
+            return res.status(400).send({
+                success: false,
+                message: "Please provide courseId",
+            });
+        };
+
+        const conversation = await conversationModel.findOne({ course: courseId, isGroup: true })
+            .populate("participants", "name email avatar")
+            .lean();
+
+        if (!conversation) {
+            return res.status(404).send({
+                success: false,
+                message: "Conversation not found",
+            });
+        };
+
+        const participants = conversation.participants.map(p => ({
+            _id: p._id,
+            name: p.name,
+            email: p.email,
+            avatar: p.avatar || null
+        }));
+
+        return res.status(200).send({
+            success: true,
+            message: "Fetched conversation by course successfully",
+            participants
+        });
+    } catch (error) {
+        console.log("Error in ger conversation by course Id: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+}

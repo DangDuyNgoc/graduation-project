@@ -12,6 +12,25 @@ function ChatDetail({ conversationId, onClose }) {
 
   const socket = getSocket();
 
+  useEffect(() => {
+    const handleReceiveMessage = (message) => {
+      if (message.conversation.toString() === conversationId) {
+        setConversationInfo((prev) => ({
+          ...prev,
+          lastMessage: message.text,
+          lastMessageAt: message.createdAt,
+          lastMessageSender: message.sender._id,
+        }));
+      }
+    };
+
+    socket.on("receiveMessage", handleReceiveMessage);
+
+    return () => {
+      socket.off("receiveMessage", handleReceiveMessage);
+    };
+  }, [conversationId, socket]);
+
   const fetchConversation = async () => {
     setLoading(true);
     try {
@@ -34,8 +53,8 @@ function ChatDetail({ conversationId, onClose }) {
   }, [conversationId]);
 
   useEffect(() => {
-    if(conversationInfo && conversationId && user?._id) {
-      socket.emit("markAsRead", {conversationId});
+    if (conversationInfo && conversationId && user?._id) {
+      socket.emit("markAsRead", { conversationId });
     }
   }, [conversationInfo, conversationId, user._id]);
 
@@ -59,15 +78,21 @@ function ChatDetail({ conversationId, onClose }) {
     );
   }
 
-  const otherUser = !conversationInfo.isGroup
-    ? conversationInfo.participants.find((p) => p._id !== user._id)
-    : conversationInfo.groupAdmin;
+  const chatInfo = conversationInfo.isGroup
+    ? {
+        isGroup: true,
+        name: conversationInfo.name,
+        avatar: {
+          url: "https://res.cloudinary.com/dsfdghxx4/image/upload/v1763386635/6387947_fg6dzn.png",
+        },
+      }
+    : conversationInfo.participants.find((p) => p._id !== user._id);
 
   return (
     <ChatView
       conversationId={conversationId}
       isOpen={true}
-      teacher={otherUser}
+      chatInfo={chatInfo}
       onClose={onClose}
       openChatView={true}
     />

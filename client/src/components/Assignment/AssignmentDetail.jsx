@@ -497,8 +497,7 @@ const AssignmentDetail = () => {
                     <AlertDialogDescription>
                       Your submission has a high similarity score (
                       {(plagiarismReport?.similarityScore * 100).toFixed(2)}
-                      %). Are you sure you want to continue submitting this
-                      assignment?
+                      %).
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

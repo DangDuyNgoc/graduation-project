@@ -2,9 +2,13 @@ import {
   deleteStudentTeacherCourses,
   getStudentTeacherCourses,
 } from "@/api/courseApi";
+import AddToChatModal from "@/components/Chat/AddToChatModal";
 import DeleteDialog from "@/components/Common/DeleteDialog";
 import LoadingSpinner from "@/components/Common/LoadingSpinner";
+import { Button } from "@/components/ui/button";
 import DashboardLayout from "@/layout/Dashboard";
+import api from "@/utils/axiosInstance";
+import { getSocket } from "@/utils/socket";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
@@ -15,8 +19,12 @@ export default function TeacherEnrolledStudent() {
   const [loading, setLoading] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const [loadingDelete, setLoadingDelete] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [currentMembers, setCurrentMembers] = useState([]);
   const navigate = useNavigate();
+
+  const socket = getSocket();
 
   const handleDeleteStudent = async () => {
     if (!selectedStudent) return;
@@ -33,6 +41,33 @@ export default function TeacherEnrolledStudent() {
       setOpenDelete(false);
       setSelectedStudent(null);
     }
+  };
+  useEffect(() => {
+    const handleGroupCreated = (group) => {
+      const memberIds = group.participants.map((p) => p._id);
+      setCurrentMembers(memberIds);
+    };
+    socket.on("groupCreated", handleGroupCreated);
+
+    return () => {
+      socket.off("groupCreated", handleGroupCreated);
+    };
+  }, [socket]);
+
+  const handleOpenModal = async () => {
+    try {
+      if (!id) return;
+
+      const { data } = await api.get(`/conversation/course-participants/${id}`);
+      if (data.success && data.participants) {
+        const memberIds = data.participants.map((p) => p._id.toString());
+        setCurrentMembers(memberIds);
+        console.log(memberIds);
+      }
+    } catch (err) {
+      console.error("Error fetching conversation participants:", err);
+    }
+    setOpenModal(true);
   };
 
   useEffect(() => {
@@ -56,14 +91,20 @@ export default function TeacherEnrolledStudent() {
   return (
     <DashboardLayout>
       <div className="p-4">
-        <div className="flex justify-between items-center">
+        <Button onClick={() => navigate(-1)}>Go Back</Button>
+        <div className="flex justify-between items-center mt-4">
           <h2 className="text-lg font-semibold">Enrolled Students</h2>
-          <button
-            onClick={() => navigate(`/teacher-enroll-student/${id}`)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-md text-sm hover:bg-blue-700 transition cursor-pointer"
-          >
-            Enroll student
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => navigate(`/teacher-enroll-student/${id}`)}
+              className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-md text-sm hover:bg-blue-700 transition cursor-pointer"
+            >
+              Enroll student
+            </button>
+            <Button onClick={() => handleOpenModal()}>
+              Add to Conversation
+            </Button>
+          </div>
         </div>
 
         {loading && <LoadingSpinner text="Loading..." className="py-20" />}
@@ -93,7 +134,7 @@ export default function TeacherEnrolledStudent() {
                 <th className="border border-gray-300 px-3 py-2 text-left">
                   Phone
                 </th>
-                <th className="border border-gray-300 px-3 py-2 text-left w-24">
+                <th className="border border-gray-300 px-3 py-2 text-left">
                   Action
                 </th>
               </tr>
@@ -106,7 +147,10 @@ export default function TeacherEnrolledStudent() {
                   </td>
                   <td className="border border-gray-300 px-3 py-2">
                     <img
-                      src={student.avatar?.url || "/default-avatar.png"}
+                      src={
+                        student.avatar?.url ||
+                        "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
+                      }
                       alt={student.name}
                       className="w-10 h-10 object-cover rounded-full border"
                     />
@@ -144,6 +188,15 @@ export default function TeacherEnrolledStudent() {
         title={`Delete student "${selectedStudent?.name}"?`}
         loading={loadingDelete}
         onConfirm={handleDeleteStudent}
+      />
+
+      {/* add students modal */}
+      <AddToChatModal
+        isOpen={openModal}
+        onClose={() => setOpenModal(false)}
+        students={students}
+        courseId={id}
+        participants={currentMembers}
       />
     </DashboardLayout>
   );

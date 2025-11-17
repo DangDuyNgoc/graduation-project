@@ -486,7 +486,7 @@ export const refreshTokenController = async (req, res) => {
         const newRefreshToken = createRefreshToken(user._id);
         sendToken(res, newAccessToken, newRefreshToken);
 
-        return res.status(200).send({
+        res.status(200).json({
             success: true,
             message: "Access token refreshed successfully",
             accessToken: newAccessToken,

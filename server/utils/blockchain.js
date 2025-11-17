@@ -9,11 +9,12 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// const provider = new ethers.JsonRpcProvider(process.env.BLOCKCHAIN_RPC_URL);
-const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_URL);
+const provider = new ethers.JsonRpcProvider(process.env.BLOCKCHAIN_RPC_URL);
+// const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_URL);
 
 // Wallet from private key
-const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_SEPOLIA, provider);
+// const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_SEPOLIA, provider);
+const wallet = new ethers.Wallet(process.env.PRIVATE_KEY_LOCALHOST, provider);
 
 // get ABI contract
 const contractPath = path.resolve(__dirname, "../../blockchain/artifacts/contracts/SubmissionStorage.sol/SubmissionStorage.json");
@@ -21,6 +22,7 @@ const contractJson = JSON.parse(fs.readFileSync(contractPath, "utf8"));
 const abi = contractJson.abi;
 
 // connect contract
-const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_METAMASK, abi, wallet);
+// const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS_METAMASK, abi, wallet);
+const contract = new ethers.Contract(process.env.CONTRACT_ADDRESS, abi, wallet);
 
 export default contract;

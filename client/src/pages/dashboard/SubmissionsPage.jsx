@@ -59,6 +59,7 @@ const SubmissionsPage = () => {
       return 0;
     });
   }, [submissions, sortBy]);
+  
 
   return (
     <DashboardLayout>
@@ -152,7 +153,8 @@ const SubmissionsPage = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {submission.plagiarismScore != null
-                        ? `${submission.plagiarismScore}%`
+                        ? `${submission.plagiarismScore * 100}%`
+
                         : "—"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">

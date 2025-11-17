@@ -151,7 +151,7 @@ const CourseDetail = () => {
 
                   return (
                     <Link
-                      to={isExpired ? "#" : ` /assignment/${a._id}`}
+                      to={isExpired ? "#" : `/assignment/${a._id}`}
                       key={a._id}
                       className={`block border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition ${expiredCss}`}
                     >
