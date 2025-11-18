@@ -28,6 +28,9 @@ import TeacherEnrolledStudent from "./pages/dashboard/TeacherEnrolledStudent";
 import TeacherEnrolStudent from "./pages/dashboard/TeacherEnrolStudent";
 import ConversationsPage from "./pages/dashboard/ConversationsPage";
 import ChatBotPage from "./pages/dashboard/ChatBotPage";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import VerifyCode from "./pages/auth/VerifyCode";
+import ResetPassword from "./pages/auth/ResetPassword";
 
 const root = createBrowserRouter([
   {
@@ -158,6 +161,18 @@ const root = createBrowserRouter([
   {
     path: "/signup",
     element: <Signup />,
+  },
+  {
+    path: "/forgot-password",
+    element: <ForgotPassword />,
+  },
+  {
+    path: "/verify-code",
+    element: <VerifyCode />,
+  },
+  {
+    path: "/reset-password",
+    element: <ResetPassword />,
   },
 ]);
 

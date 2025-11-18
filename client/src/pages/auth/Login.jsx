@@ -107,6 +107,15 @@ const Login = () => {
             </div>
           </div>
 
+          <div className="text-right text-sm text-primary font-medium cursor-pointer hover:opacity-80 transition-opacity duration-200">
+            <span
+              onClick={() => navigate("/forgot-password")}
+              className="text-xs"
+            >
+              Forgot your password?
+            </span>
+          </div>
+
           {/* error message */}
           {error && <p className="text-red-500 text-sm">{error}</p>}
 

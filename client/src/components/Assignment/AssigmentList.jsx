@@ -1,17 +1,26 @@
-import { deleteAssignment, getAssignmentByCourseId } from "@/api/assignmentApi";
+import {
+  deleteAllAssignmentByCourseId,
+  deleteAllMaterialsAssignment,
+  deleteAssignment,
+  deleteOneAssignmentMaterial,
+  getAssignmentByCourseId,
+} from "@/api/assignmentApi";
+
 import {
   ChevronDown,
   ChevronUp,
   FileText,
   LoaderCircle,
   Pencil,
+  Settings,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+
+import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import DeleteDialog from "../Common/DeleteDialog";
 import AssignmentDialog from "./AssignmentDialog";
-import { useNavigate } from "react-router-dom";
 
 export default function AssignmentList({ courseId }) {
   const [assignments, setAssignments] = useState([]);
@@ -19,9 +28,15 @@ export default function AssignmentList({ courseId }) {
   const [loading, setLoading] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
-  const [openDelete, setOpenDelete] = useState(false);
+
+  const [openMenu, setOpenMenu] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteType, setDeleteType] = useState(null);
+  const [openDelete, setOpenDelete] = useState(false);
   const [loadingDelete, setLoadingDelete] = useState(false);
+
+  const menuRef = useRef(null);
+
   const navigate = useNavigate();
 
   const fetchAssignments = async () => {
@@ -29,14 +44,9 @@ export default function AssignmentList({ courseId }) {
     setLoading(true);
     try {
       const data = await getAssignmentByCourseId(courseId);
-      if (data.success) {
-        setAssignments(data.assignment || []);
-      } else {
-        toast.error(data.message || "Failed to fetch assignments");
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error("Error fetching assignments");
+      if (data.success) setAssignments(data.assignment);
+    } catch {
+      setAssignments([]);
     } finally {
       setLoading(false);
     }
@@ -48,28 +58,83 @@ export default function AssignmentList({ courseId }) {
 
   const toggleExpand = (id) => {
     setExpanded((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget?._id) return;
+    setLoadingDelete(true);
+
     try {
-      setLoadingDelete(true);
-      const res = await deleteAssignment(deleteTarget._id);
-      if (res.success) {
-        toast.success("Assignment deleted successfully!");
-        fetchAssignments();
-      } else {
-        toast.error(res.message || "Failed to delete assignment");
+      if (deleteType === "deleteAllAssignments") {
+        const res = await deleteAllAssignmentByCourseId(courseId);
+        if (res.success) {
+          toast.success("Deleted all assignments!");
+          setAssignments([]);
+        } else toast.error(res.message || "Failed to delete all assignments");
+
+        setLoadingDelete(false);
+        setOpenDelete(false);
+        return;
       }
-    } catch (err) {
-      toast.error("Error deleting assignment");
-    } finally {
-      setLoadingDelete(false);
-      setOpenDelete(false);
+
+      if (deleteType === "assignment") {
+        const res = await deleteAssignment(deleteTarget._id);
+        if (res.success) {
+          toast.success("Assignment deleted!");
+          setAssignments((prev) =>
+            prev.filter((a) => a._id !== deleteTarget._id)
+          );
+        }
+      } else if (deleteType === "oneMaterial") {
+        const res = await deleteOneAssignmentMaterial(
+          deleteTarget.assignmentId,
+          deleteTarget.key
+        );
+        if (res.success) {
+          toast.success("Material deleted!");
+          setAssignments((prev) =>
+            prev.map((a) =>
+              a._id === deleteTarget.assignmentId
+                ? {
+                    ...a,
+                    materials: a.materials.filter(
+                      (m) => m.key !== deleteTarget.key
+                    ),
+                  }
+                : a
+            )
+          );
+        }
+      } else if (deleteType === "allMaterials") {
+        const res = await deleteAllMaterialsAssignment(deleteTarget._id);
+        if (res.success) {
+          toast.success("All materials deleted!");
+          setAssignments((prev) =>
+            prev.map((a) =>
+              a._id === deleteTarget._id ? { ...a, materials: [] } : a
+            )
+          );
+        }
+      }
+    } catch {
+      toast.error("Error deleting");
     }
+
+    setLoadingDelete(false);
+    setOpenDelete(false);
   };
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpenMenu(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   if (loading)
     return (
@@ -82,15 +147,46 @@ export default function AssignmentList({ courseId }) {
     <div className="space-y-4 mt-10">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-gray-800">Assignments</h2>
-        <button
-          onClick={() => {
-            setSelectedAssignment(null);
-            setOpenDialog(true);
-          }}
-          className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-md text-sm hover:bg-blue-700 transition"
-        >
-          Create assignment
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setOpenMenu((p) => !p)}
+            className="p-2 rounded-full hover:bg-gray-100"
+          >
+            <Settings className="size-6 text-gray-700" />
+          </button>
+
+          {openMenu && (
+            <div
+              ref={menuRef}
+              className="absolute right-0 mt-2 min-w-52 bg-white shadow-lg 
+                            border border-gray-200 rounded-md z-20"
+            >
+              <button
+                onClick={() => {
+                  setSelectedAssignment(null);
+                  setOpenDialog(true);
+                  setOpenMenu(false);
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+              >
+                Create assignment
+              </button>
+
+              {assignments.length > 0 && (
+                <button
+                  onClick={() => {
+                    setDeleteType("deleteAllAssignments");
+                    setOpenDelete(true);
+                    setOpenMenu(false);
+                  }}
+                  className="w-full text-left px-4 py-2 hover:bg-red-100 text-sm text-red-500"
+                >
+                  Delete all assignments
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {assignments.length === 0 ? (
@@ -102,7 +198,7 @@ export default function AssignmentList({ courseId }) {
           {assignments.map((item) => {
             const isOpen = expanded.includes(item._id);
             return (
-              <div key={item._id} className="transition-all">
+              <div key={item._id}>
                 <div className="flex justify-between items-center py-4 px-2 hover:bg-gray-50">
                   <h3
                     onClick={() => navigate(`/teacher-submissions/${item._id}`)}
@@ -110,33 +206,34 @@ export default function AssignmentList({ courseId }) {
                   >
                     {item.title}
                   </h3>
+
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={() => {
                         setSelectedAssignment(item);
                         setOpenDialog(true);
                       }}
                       className="p-1 hover:bg-gray-100 rounded-md"
                     >
-                      <Pencil className="size-4 text-gray-600 cursor-pointer" />
+                      <Pencil className="size-4 text-gray-600" />
                     </button>
+
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
+                      onClick={() => {
                         setDeleteTarget(item);
+                        setDeleteType("assignment");
                         setOpenDelete(true);
                       }}
                       className="p-1 hover:bg-red-100 rounded-md"
                     >
-                      <Trash2 className="size-4 text-red-500 cursor-pointer" />
+                      <Trash2 className="size-4 text-red-500" />
                     </button>
 
                     <span onClick={() => toggleExpand(item._id)}>
                       {isOpen ? (
-                        <ChevronUp className="size-4 text-gray-600 cursor-pointer" />
+                        <ChevronUp className="size-4 text-gray-600" />
                       ) : (
-                        <ChevronDown className="size-4 text-gray-600 cursor-pointer" />
+                        <ChevronDown className="size-4 text-gray-600" />
                       )}
                     </span>
                   </div>
@@ -152,43 +249,51 @@ export default function AssignmentList({ courseId }) {
 
                     {item.materials?.length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-sm font-medium text-gray-800">
-                          Attachments:
-                        </p>
-                        {item.materials.map((file) => (
-                          <a
-                            key={file._id}
-                            href={
-                              file.fileType === "application/pdf"
-                                ? file.s3_url
-                                : `https://docs.google.com/gview?url=${encodeURIComponent(
-                                    file.s3_url
-                                  )}&embedded=true`
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-blue-600 hover:underline text-sm"
+                        <div className="flex justify-between items-center text-sm font-medium text-gray-800">
+                          <span>Attachments:</span>
+
+                          <button
+                            onClick={() => {
+                              setDeleteTarget(item);
+                              setDeleteType("allMaterials");
+                              setOpenDelete(true);
+                            }}
+                            className="text-xs text-red-500 hover:underline"
                           >
-                            <FileText className="size-4" />
-                            {file.title}
-                          </a>
+                            Delete all
+                          </button>
+                        </div>
+
+                        {item.materials.map((file) => (
+                          <div
+                            key={file._id}
+                            className="flex justify-between items-center"
+                          >
+                            <a
+                              href={file.s3_url}
+                              target="_blank"
+                              className="flex items-center gap-2 text-blue-600 hover:underline text-sm"
+                            >
+                              <FileText className="size-4" />
+                              {file.title}
+                            </a>
+
+                            <button
+                              onClick={() => {
+                                setDeleteTarget({
+                                  ...file,
+                                  assignmentId: item._id,
+                                });
+                                setDeleteType("oneMaterial");
+                                setOpenDelete(true);
+                              }}
+                              className="text-xs text-red-500 hover:underline"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         ))}
                       </div>
-                    )}
-
-                    {item.dueDate && (
-                      <p className="text-xs text-gray-500">
-                        Due:{" "}
-                        {new Date(item.dueDate).toLocaleString([], {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                        {item.allowLateSubmission && (
-                          <span className="text-yellow-600 ml-2">
-                            (Late allowed)
-                          </span>
-                        )}
-                      </p>
                     )}
                   </div>
                 )}
@@ -198,20 +303,26 @@ export default function AssignmentList({ courseId }) {
         </div>
       )}
 
-      {openDialog && (
-        <AssignmentDialog
-          open={openDialog}
-          onClose={() => setOpenDialog(false)}
-          courseId={courseId}
-          initialData={selectedAssignment}
-          onSuccess={fetchAssignments}
-        />
-      )}
+      <AssignmentDialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        courseId={courseId}
+        initialData={selectedAssignment}
+        onSuccess={fetchAssignments}
+      />
 
       <DeleteDialog
         open={openDelete}
         setOpen={setOpenDelete}
-        title={`Delete assignment "${deleteTarget?.title}"?`}
+        title={
+          deleteType === "deleteAllAssignments"
+            ? "Delete all assignments in this course?"
+            : deleteType === "allMaterials"
+            ? `Delete all materials of "${deleteTarget?.title}"?`
+            : deleteType === "oneMaterial"
+            ? `Delete material "${deleteTarget?.title}"?`
+            : `Delete assignment "${deleteTarget?.title}"?`
+        }
         loading={loadingDelete}
         onConfirm={handleDelete}
       />

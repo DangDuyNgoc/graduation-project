@@ -34,11 +34,6 @@ const Sidebar = () => {
 
   const teacherMenu = [
     {
-      name: "Dashboard",
-      path: "/dashboard",
-      icon: <Home className="size-4" />,
-    },
-    {
       name: "My Courses",
       path: "/teacher-courses",
       icon: <GraduationCap className="size-4" />,

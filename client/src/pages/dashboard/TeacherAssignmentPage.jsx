@@ -31,9 +31,9 @@ export default function TeacherAssignmentPage() {
     setLoading(true);
     try {
       const data = await getOneCourse(id);
-      setCourse(data.result);
+      if (data.success) setCourse(data.result);
     } catch (error) {
-      console.error("Failed to fetch course detail:", error);
+      setCourse(null);
     } finally {
       setLoading(false);
     }
@@ -170,7 +170,7 @@ export default function TeacherAssignmentPage() {
                 Course Resources
               </h2>
 
-              <div ref={menuRef} className="relative pe-3">
+              <div ref={menuRef} className="relative">
                 <button
                   onClick={() => setOpenMenu((prev) => !prev)}
                   className="p-2 rounded-full hover:bg-gray-100 transition"
@@ -210,16 +210,18 @@ export default function TeacherAssignmentPage() {
                       Delete course
                     </button>
 
-                    <button
-                      onClick={() => {
-                        setOpenMenu(false);
-                        setDeleteType("materials");
-                        setOpenDelete(true);
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                    >
-                      Delete all resources
-                    </button>
+                    {course.materials?.length > 0 && (
+                      <button
+                        onClick={() => {
+                          setOpenMenu(false);
+                          setDeleteType("materials");
+                          setOpenDelete(true);
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                      >
+                        Delete all resources
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

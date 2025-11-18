@@ -9,7 +9,14 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
   // check user role
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+    if (user.role === "TEACHER") {
+      return <Navigate to="/teacher-courses" replace />;
+    }
+
+    if (user.role === "STUDENT") {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return <Navigate to="/" replace />;
   }
 
   return children;

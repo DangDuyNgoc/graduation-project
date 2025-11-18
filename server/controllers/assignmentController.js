@@ -566,6 +566,96 @@ export const deleteAllMaterialsAssignmentController = async (req, res) => {
     }
 };
 
+// delete all assignments by courseId
+export const deleteAssignmentsByCourseIdController = async (req, res) => {
+    try {
+        const { courseId } = req.params;
+
+        if (!courseId) {
+            return res.status(400).send({
+                success: false,
+                message: "Please provide courseId"
+            });
+        }
+
+        // get all assignments in course
+        const assignments = await assignmentModel.find({ courseId });
+
+        if (assignments.length === 0) {
+            return res.status(404).send({
+                success: false,
+                message: "No assignments found for this course"
+            });
+        }
+
+        let allS3Keys = [];
+        let allSubmissionIds = [];
+
+        for (const assignment of assignments) {
+            // get submissions of this assignment
+            const submissions = await submissionModel.find({
+                assignment: assignment._id
+            });
+
+            const submissionIds = submissions.map(s => s._id);
+            allSubmissionIds.push(...submissionIds);
+
+            // call Flask delete for each submission
+            const flaskResults = await Promise.allSettled(
+                submissions.map(sub =>
+                    axios.delete(
+                        `http://localhost:5000/delete_submission/${sub._id.toString()}`
+                    )
+                )
+            );
+
+            const flaskKeys = flaskResults
+                .filter(r => r.status === "fulfilled" && r.value?.data?.success)
+                .flatMap(r => r.value.data.s3_key || [])
+                .filter(Boolean);
+
+            allS3Keys.push(...flaskKeys);
+
+            // collect assignment materials S3 keys
+            const materialKeys = (assignment.materials || [])
+                .map(m => m.key)
+                .filter(Boolean);
+
+            allS3Keys.push(...materialKeys);
+        }
+
+        // delete all materials from s3
+        if (allS3Keys.length > 0) {
+            await deleteObjects(allS3Keys);
+        }
+
+        // delete plagiarism reports
+        await PlagiarismReportModel.deleteMany({
+            submissionId: { $in: allSubmissionIds }
+        });
+
+        // delete all submissions
+        await submissionModel.deleteMany({
+            assignment: { $in: assignments.map(a => a._id) }
+        });
+
+        // delete assignments
+        await assignmentModel.deleteMany({ courseId });
+
+        return res.status(200).send({
+            success: true,
+            message: "Deleted all assignments for this course"
+        });
+
+    } catch (error) {
+        console.error("Error in deleteAssignmentsByCourseController:", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+};
+
 // delete all assignments 
 export const deleteAllAssignmentController = async (req, res) => {
     try {
