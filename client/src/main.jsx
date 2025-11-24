@@ -38,11 +38,19 @@ const root = createBrowserRouter([
     children: [
       {
         path: "/",
-        element: <Navigate to="/dashboard" replace />,
+        element: (
+          <ProtectedRoute allowedRoles={["STUDENT"]}>
+            <Navigate to="/dashboard" replace />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "/dashboard",
-        element: <HomePage />,
+        element: (
+          <ProtectedRoute allowedRoles={["STUDENT"]}>
+            <HomePage />
+          </ProtectedRoute>
+        ),
       },
       {
         path: "/assignments",
