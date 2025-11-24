@@ -25,6 +25,28 @@ const ConversationsPage = () => {
   const socket = getSocket();
 
   useEffect(() => {
+    socket.on("receiveMessage", (message) => {
+      setConversationToDelete((prev) => {
+        const convExists = prev.some(
+          (conv) => conv._id.toString() === message.conversation.toString()
+        );
+
+        if (!convExists) {
+          return [
+            {
+              _id: message.conversation.toString(),
+              lastMessage: message.text,
+              lastMessageAt: message.createdAt,
+              lastMessageSender: message.sender._id,
+              participants: [user._id, message.sender._id],
+            },
+            ...prev,
+          ];
+        }
+      });
+    });
+
+    // update conversation
     socket.on(
       "conversationUpdated",
       ({ conversationId, lastMessage, lastMessageAt, lastMessageSender }) => {
@@ -38,35 +60,35 @@ const ConversationsPage = () => {
       }
     );
 
-    socket.on("receiveMessage", (message) => {
-      setConversations((prev) => {
-        const convExists = prev.some(
-          (conv) => conv._id.toString() === message.conversation.toString()
-        );
-        if (!convExists) {
-          return [
-            {
-              _id: message.conversation.toString(),
-              lastMessage: message.text,
-              lastMessageAt: message.createdAt,
-              lastMessageSender: message.sender._id,
-              participants: [user._id, message.sender._id],
-            },
-            ...prev,
-          ];
-        }
-        return prev.map((conv) =>
-          conv._id.toString() === message.conversation.toString()
-            ? {
-                ...conv,
-                lastMessage: message.text,
-                lastMessageAt: message.createdAt,
-                lastMessageSender: message.sender._id,
-              }
-            : conv
-        );
-      });
-    });
+    // socket.on("receiveMessage", (message) => {
+    //   setConversations((prev) => {
+    //     const convExists = prev.some(
+    //       (conv) => conv._id.toString() === message.conversation.toString()
+    //     );
+    //     if (!convExists) {
+    //       return [
+    //         {
+    //           _id: message.conversation.toString(),
+    //           lastMessage: message.text,
+    //           lastMessageAt: message.createdAt,
+    //           lastMessageSender: message.sender._id,
+    //           participants: [user._id, message.sender._id],
+    //         },
+    //         ...prev,
+    //       ];
+    //     }
+    //     return prev.map((conv) =>
+    //       conv._id.toString() === message.conversation.toString()
+    //         ? {
+    //             ...conv,
+    //             lastMessage: message.text,
+    //             lastMessageAt: message.createdAt,
+    //             lastMessageSender: message.sender._id,
+    //           }
+    //         : conv
+    //     );
+    //   });
+    // });
 
     socket.on("messageDeleted", (updated) => {
       setConversations((prev) =>
@@ -77,15 +99,10 @@ const ConversationsPage = () => {
         )
       );
     });
-
-    socket.on("groupCreated", (conversation) => {
-      setConversations((prev) => [conversation, ...prev]);
-    });
     return () => {
       socket.off("conversationUpdated");
       socket.off("receiveMessage");
       socket.off("messageDeleted");
-      socket.off("groupCreated");
     };
   }, []);
 
@@ -105,8 +122,7 @@ const ConversationsPage = () => {
         }
       );
       if (data.success) {
-        console.log(data.conversations);
-        setConversations(data.conversations);
+        setConversations(data.conversations.filter((conv) => conv.lastMessage));
       }
     } catch (error) {
       console.log("Error fetching conversations:", error);
@@ -183,15 +199,12 @@ const ConversationsPage = () => {
           ) : (
             <ul>
               {filteredConversation.map((conv) => {
-                const isGroup = conv.isGroup;
-                const displayName = isGroup
-                  ? conv.name
-                  : conv.participants.find((p) => p._id !== user._id)?.name;
+                const displayName = conv.participants.find(
+                  (p) => p._id !== user._id
+                )?.name;
 
-                const avatar = isGroup
-                  ? "https://res.cloudinary.com/dsfdghxx4/image/upload/v1763386635/6387947_fg6dzn.png"
-                  : conv.participants.find((p) => p._id !== user._id)?.avatar
-                      ?.url;
+                const avatar = conv.participants.find((p) => p._id !== user._id)
+                  ?.avatar?.url;
 
                 const unreadObj = conv.unreadMessages?.find(
                   (um) => um.user === user._id
@@ -230,14 +243,12 @@ const ConversationsPage = () => {
                           />
                         </Avatar>
                         <div className="flex-1">
-                          <p className="font-semibold">
-                            {displayName}
-                          </p>
+                          <p className="font-semibold">{displayName}</p>
                           <div className="flex items-center">
                             <p className="text-sm text-gray-600 truncate mr-1 w-[140px]">
                               {conv.lastMessageSender === user._id
                                 ? `You: ${conv.lastMessage}`
-                                : conv.lastMessage || "No messages yet"}
+                                : conv.lastMessage}
                             </p>
 
                             <div className="flex items-center gap-2">

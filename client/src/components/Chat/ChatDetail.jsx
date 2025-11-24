@@ -39,7 +39,6 @@ function ChatDetail({ conversationId, onClose }) {
       });
 
       if (data.success) {
-        console.log(data.conversation);
         setConversationInfo(data.conversation);
       }
     } catch (error) {
@@ -78,21 +77,15 @@ function ChatDetail({ conversationId, onClose }) {
     );
   }
 
-  const chatInfo = conversationInfo.isGroup
-    ? {
-        isGroup: true,
-        name: conversationInfo.name,
-        avatar: {
-          url: "https://res.cloudinary.com/dsfdghxx4/image/upload/v1763386635/6387947_fg6dzn.png",
-        },
-      }
-    : conversationInfo.participants.find((p) => p._id !== user._id);
+  const otherUser = !conversationInfo.isGroup
+    ? conversationInfo.participants.find((p) => p._id !== user._id)
+    : conversationInfo.groupAdmin;
 
   return (
     <ChatView
       conversationId={conversationId}
       isOpen={true}
-      chatInfo={chatInfo}
+      teacher={otherUser}
       onClose={onClose}
       openChatView={true}
     />

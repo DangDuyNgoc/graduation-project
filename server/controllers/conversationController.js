@@ -3,7 +3,7 @@ import conversationModel from "../models/conversationModel.js";
 
 export const createOrGetConversation = async (req, res) => {
     try {
-        const { participants, isGroup, name, adminId, courseId } = req.body;
+        const { participants, createConversation } = req.body;
 
         if (!participants || !Array.isArray(participants) || participants.length < 2) {
             return res.status(400).send({
@@ -14,23 +14,6 @@ export const createOrGetConversation = async (req, res) => {
 
         // convert participants -> ObjectId[]
         const participantsIds = participants.map((id) => new mongoose.Types.ObjectId(id));
-
-        // group chat
-        if (isGroup) {
-            const newGroup = await conversationModel.create({
-                name: name || "New Group",
-                isGroup: true,
-                participants: participantsIds,
-                groupAdmin: adminId,
-                course: courseId,
-            });
-
-            return res.status(200).send({
-                success: true,
-                message: "Group chat created successfully",
-                conversation: newGroup
-            });
-        };
 
         // private chat
         const existing = await conversationModel.findOne({
@@ -44,6 +27,14 @@ export const createOrGetConversation = async (req, res) => {
                 success: true,
                 message: "Conversation fetched successfully",
                 conversation: existing
+            });
+        };
+
+        if (!createConversation) {
+            return res.status(200).send({
+                success: true,
+                message: "No conversation found",
+                conversation: null
             });
         };
 
@@ -217,6 +208,7 @@ export const getConversationByCourseController = async (req, res) => {
 
         const conversation = await conversationModel.findOne({ course: courseId, isGroup: true })
             .populate("participants", "name email avatar")
+            .populate("groupAdmin", "name")
             .lean();
 
         if (!conversation) {
@@ -226,20 +218,76 @@ export const getConversationByCourseController = async (req, res) => {
             });
         };
 
-        const participants = conversation.participants.map(p => ({
-            _id: p._id,
-            name: p.name,
-            email: p.email,
-            avatar: p.avatar || null
-        }));
+        const result = {
+            _id: conversation._id,
+            name: conversation.name,
+            groupAdmin: conversation.groupAdmin ? { _id: conversation.groupAdmin._id, name: conversation.groupAdmin.name } : null,
+            participants: conversation.participants.map(p => ({
+                _id: p._id,
+                name: p.name,
+                email: p.email,
+                avatar: p.avatar || null
+            }))
+        };
 
         return res.status(200).send({
             success: true,
             message: "Fetched conversation by course successfully",
-            participants
+            conversations: [result]
         });
     } catch (error) {
         console.log("Error in ger conversation by course Id: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+}
+
+// update group chat
+export const updateGroupChatController = async (req, res) => {
+    try {
+        const { conversationId } = req.params;
+        const { name, membersToAdd, membersToRemove } = req.body;
+
+        if (!conversationId) {
+            return res.status(400).send({
+                success: false,
+                message: "Please provide conversationId"
+            });
+        };
+
+        const update = {};
+
+        if (name) update.name = name;
+        if (Array.isArray(membersToAdd) && membersToAdd.length > 0) {
+            update.$addToSet = { participants: { $each: membersToAdd } }
+        };
+
+        // remove members
+        if (Array.isArray(membersToRemove) && membersToRemove.length > 0) {
+            update.$pull = { participants: { $in: membersToRemove } }
+        };
+
+        const conversation = await conversationModel.findByIdAndUpdate(
+            conversationId, update,
+            { new: true }
+        )
+
+        if (!conversation) {
+            return res.status(404).send({
+                success: false,
+                message: "Conversation not found"
+            })
+        }
+
+        res.status(200).send({
+            success: true,
+            message: "Updated Successfully",
+            conversation
+        });
+    } catch (error) {
+        console.log("Error in get conversation update: ", error);
         return res.status(500).send({
             success: false,
             message: "Internal server error"

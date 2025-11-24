@@ -22,9 +22,6 @@ const submissionSchema = new mongoose.Schema({
     plagiarismScore: {
         type: Number // ex: 15%
     },
-    aiFeedback: {
-        type: String
-    },
     blockchainTxHash: {
         type: String // hash of transaction and save on the blockchain
     },

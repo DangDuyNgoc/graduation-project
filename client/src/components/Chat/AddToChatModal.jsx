@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import toast from "react-hot-toast";
 import { Input } from "../ui/input";
 import { useNavigate } from "react-router-dom";
+import api from "@/utils/axiosInstance";
 
 export default function AddToChatModal({
   isOpen,
@@ -13,17 +14,35 @@ export default function AddToChatModal({
   onClose,
   students,
   participants = [],
+  groupName,
+  adminId,
+  conversationId,
+  onGroupUpdated,
 }) {
   const [filtered, setFiltered] = useState([]);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [groupName, setGroupName] = useState("New Group");
+  const [name, setName] = useState(groupName || "New Group");
+
+  const [addMembers, setAddMembers] = useState([]);
+
+  const isEdit = Boolean(conversationId);
+
+  const nonMembers = students
+    .map((s) => s._id.toString())
+    .filter((id) => !participants.includes(id));
 
   useEffect(() => {
     if (students) setFiltered(students);
-    console.log(students);
   }, [students]);
+
+  useEffect(() => {
+    if (groupName) setName(groupName);
+  }, [groupName]);
+
+  useEffect(() => {
+    setAddMembers([]);
+  }, [participants]);
 
   const navigate = useNavigate();
 
@@ -41,20 +60,30 @@ export default function AddToChatModal({
 
   const socket = getSocket();
 
-  const toggleSelect = (id) => {
-    if (participants.includes(id)) return;
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
+  const toggleSelectAdd = (id) => {
+    const isMember = participants.includes(id);
+
+    if (isMember) {
+      setAddMembers((prev) =>
+        prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      );
+    } else {
+      setAddMembers((prev) =>
+        prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      );
+    }
   };
 
   const addSelectedToChat = () => {
-    if (selected.length === 0) return;
+    if (addMembers.length === 0) {
+      toast.error("Select at least 2 members");
+      return;
+    }
     setLoading(true);
 
     socket.emit("createGroup", {
       name: groupName,
-      participants: [...selected, socket.userId],
+      participants: [...addMembers, socket.userId],
       adminId: socket.userId,
       courseId,
     });
@@ -68,30 +97,111 @@ export default function AddToChatModal({
     navigate("/conversations");
   };
 
-  const addAllToChat = () => {
+  const addAllToChat = async () => {
+    if (!conversationId) return;
+    setLoading(true);
+
     const allIds = students
-      .map((s) => s._id)
+      .map((s) => s._id.toString())
       .filter((id) => !participants.includes(id));
 
-    if (allIds.length === 0) return;
+    if (allIds.length === 0) {
+      toast.error("No members left to add");
+      setLoading(false);
+      return;
+    }
+
+    socket.emit("addMembers", {
+      conversationId,
+      newMembers: allIds,
+    });
+
+    socket.once("addMembersSuccess", (updated) => {
+      toast.success(`Added ${allIds.length} members!`);
+      onGroupUpdated(updated);
+      setLoading(false);
+      onClose();
+    });
+
+    socket.once("error", (err) => {
+      toast.error(err.message || "Failed to add members");
+      setLoading(false);
+    });
+  };
+
+  const addMembersToGroup = () => {
+    if (addMembers.length === 0) {
+      toast.error("Select members first");
+      return;
+    }
 
     setLoading(true);
 
-    socket.emit("createGroup", {
-      name: groupName,
-      participants: [...allIds, socket.userId],
-      adminId: socket.userId,
-      courseId,
+    socket.emit("addMembers", {
+      conversationId,
+      newMembers: addMembers,
     });
 
-    socket.once("groupCreatedSuccess", () => {
+    socket.once("addMembersSuccess", (updated) => {
+      toast.success("Members added!");
+      onGroupUpdated(updated);
+      setAddMembers([]);
       setLoading(false);
-      setSelected([]);
       onClose();
-      toast.success("Group Created!");
     });
 
-    navigate("/conversations");
+    socket.once("addMembersFailed", (msg) => {
+      toast.error(msg || "Failed");
+      setLoading(false);
+    });
+  };
+
+  const updateGroup = async () => {
+    try {
+      setLoading(true);
+      const { data } = await api.put(`/conversation/update/${conversationId}`, {
+        name,
+        membersToAdd: addMembers,
+      });
+
+      if (data.success) {
+        toast.success("Group updated");
+        onGroupUpdated(data.conversation);
+        onClose();
+      }
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (isEdit) updateGroup();
+    else addSelectedToChat();
+  };
+
+  const handleRemoveMember = (memberId) => {
+    if (!conversationId) {
+      return;
+    }
+    setLoading(true);
+
+    socket.emit("removeMembers", {
+      conversationId,
+      memberId,
+    });
+
+    socket.once("memberRemoved", ({ updatedConversation }) => {
+      toast.success("Members removed!");
+      onGroupUpdated(updatedConversation);
+      setLoading(false);
+    });
+
+    socket.once("error", ({ message }) => {
+      toast.error(message || "Remove failed");
+      setLoading(false);
+    });
   };
 
   if (!isOpen) return null;
@@ -106,7 +216,9 @@ export default function AddToChatModal({
           <X size={22} />
         </button>
 
-        <h2 className="text-xl font-semibold mb-4">Add Students to Chat</h2>
+        <h2 className="text-xl font-semibold mb-4">
+          {isEdit ? "Update Group" : "Create Group"}
+        </h2>
 
         {/* Search */}
         <SearchBar
@@ -119,8 +231,8 @@ export default function AddToChatModal({
           <label className="block text-sm font-medium mb-1">Group Name</label>
           <Input
             type="text"
-            value={groupName}
-            onChange={(e) => setGroupName(e.target.value)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             placeholder="Enter group name..."
           />
         </div>
@@ -128,21 +240,23 @@ export default function AddToChatModal({
         {/* Student List */}
         <div className="max-h-80 overflow-y-auto border rounded-md divide-y">
           {filtered.map((s) => {
-            const disabled = participants.includes(s._id.toString());
-            console.log(disabled);
+            const isMember = participants.includes(s._id.toString());
+            const markedAdd = addMembers.includes(s._id);
+            const isAdmin = s._id.toString() === adminId;
             return (
               <div
                 key={s._id}
-                className="flex items-center gap-3 p-3 hover:bg-gray-50"
+                className="flex items-center gap-3 p-3 hover:bg-gray-50 relative"
               >
-                {!disabled && (
+                {/* add checkbox */}
+                {!isMember && (
                   <input
                     type="checkbox"
-                    disabled={disabled}
-                    checked={selected.includes(s._id)}
-                    onChange={() => toggleSelect(s._id)}
+                    disabled={isMember}
+                    checked={markedAdd}
+                    onChange={() => toggleSelectAdd(s._id)}
                     className={`h-4 w-4 cursor-pointer ${
-                      disabled ? "opacity-50" : ""
+                      isMember ? "tex-red-500" : "text-green-500"
                     }`}
                   />
                 )}
@@ -157,14 +271,32 @@ export default function AddToChatModal({
 
                 <div>
                   <div className="font-medium">{s.name}</div>
+
                   <div className="text-sm text-gray-500">{s.email}</div>
 
-                  {disabled && (
+                  {isMember && !isAdmin && (
                     <span className="text-xs text-primary font-medium">
-                      Already in chat
+                      Already in Chat
                     </span>
                   )}
                 </div>
+                {isMember && (
+                  <div className="absolute top-1 right-4">
+                    {isAdmin ? (
+                      <span className="text-xs text-blue-600 font-medium">
+                        Admin
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleRemoveMember(s._id)}
+                        className="text-red-500 cursor-pointer text-xs font-semibold hover:text-red-600"
+                        disabled={loading}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -172,21 +304,29 @@ export default function AddToChatModal({
 
         {/* Buttons */}
         <div className="flex justify-between mt-5">
-          <Button
-            onClick={addAllToChat}
-            disabled={
-              loading || students.every((s) => participants.includes(s._id))
-            }
-          >
-            {loading ? "Adding..." : "Add All"}
-          </Button>
+          {isEdit && addMembers.length > 0 && (
+            <Button onClick={addMembersToGroup} disabled={loading}>
+              {loading ? "Adding..." : `Add ${addMembers.length} Members`}
+            </Button>
+          )}
 
-          <Button
-            onClick={addSelectedToChat}
-            disabled={selected.length === 0 || loading}
-          >
-            {loading ? "Adding..." : "Add Selected"}
-          </Button>
+          {isEdit && nonMembers.length > 0 && (
+            <Button onClick={addAllToChat} disabled={loading} variant="outline">
+              {loading ? "Adding..." : "Add All Members"}
+            </Button>
+          )}
+
+          {isEdit && addMembers.length === 0 && (
+            <Button onClick={handleSubmit} disabled={loading}>
+              {loading ? "Saving..." : "Save Changes"}
+            </Button>
+          )}
+
+          {!isEdit && (
+            <Button onClick={handleSubmit} disabled={loading}>
+              {loading ? "Saving..." : "Create Group"}
+            </Button>
+          )}
         </div>
       </div>
     </div>

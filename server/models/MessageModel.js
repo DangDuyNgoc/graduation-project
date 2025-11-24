@@ -9,7 +9,6 @@ const messageSchema = new mongoose.Schema({
     sender: {
         type: mongoose.Types.ObjectId,
         ref: "user",
-        required: true
     },
     text: {
         type: String,
@@ -38,6 +37,10 @@ const messageSchema = new mongoose.Schema({
     },
     deletedByName: {
         type: String
+    },
+    isSYstem: {
+        type: Boolean,
+        default: false,
     }
 }, { timestamps: true });
 

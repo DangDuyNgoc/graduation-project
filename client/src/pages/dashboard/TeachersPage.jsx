@@ -1,4 +1,3 @@
-import ChatFrame from "@/components/Chat/ChatFrame";
 import ChatView from "@/components/Chat/ChatView";
 import SearchBar from "@/components/Common/SearchBar";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
@@ -37,6 +36,7 @@ function TeachersPage() {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchTeachers();
   }, []);
 
@@ -54,14 +54,21 @@ function TeachersPage() {
   const handleContact = async (teacher) => {
     if (!user) return null;
     try {
+      setConversationId(null);
       const { data } = await api.post(
         "/conversation/create-or-get",
         {
           participants: [teacher._id, user._id],
+          createConversation: true,
         },
         { withCredentials: true }
       );
       setSelectedTeacher(teacher);
+      if (!data.conversation) {
+        setConversationId(null);
+        return;
+      }
+
       setConversationId(data.conversation._id);
     } catch (error) {
       console.error("Error creating or getting conversation:", error);
@@ -123,19 +130,6 @@ function TeachersPage() {
                   >
                     Contact
                   </Button>
-
-                  {selectedTeacher && (
-                    <ChatView
-                      conversationId={conversationId}
-                      isOpen={true}
-                      teacher={selectedTeacher}
-                      onClose={() => {
-                        setSelectedTeacher(null);
-                        setConversationId(null);
-                      }}
-                      isOpenChatView={false}
-                    />
-                  )}
                 </div>
               ))
             ) : (
@@ -144,6 +138,18 @@ function TeachersPage() {
               </p>
             )}
           </div>
+          {selectedTeacher && (
+            <ChatView
+              conversationId={conversationId}
+              isOpen={true}
+              teacher={selectedTeacher}
+              onClose={() => {
+                setSelectedTeacher(null);
+                setConversationId(null);
+              }}
+              isOpenChatView={false}
+            />
+          )}
         </div>
       )}
     </DashboardLayout>

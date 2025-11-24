@@ -4,7 +4,8 @@ import {
     deleteConversationForUserController,
     getAllUserConversations,
     getConversationByCourseController,
-    getOneConversationController
+    getOneConversationController,
+    updateGroupChatController
 } from "../controllers/conversationController.js";
 import { isAuthenticated } from "../middlewares/authMiddleware.js";
 
@@ -15,5 +16,6 @@ conversationRoute.get("/get-all-conversations/:userId", isAuthenticated, getAllU
 conversationRoute.get("/get/:conversationId", isAuthenticated, getOneConversationController);
 conversationRoute.delete("/delete/:conversationId", isAuthenticated, deleteConversationForUserController);
 conversationRoute.get("/course-participants/:courseId", isAuthenticated, getConversationByCourseController);
+conversationRoute.put("/update/:conversationId", isAuthenticated, updateGroupChatController);
 
 export default conversationRoute;

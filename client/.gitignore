@@ -9,6 +9,7 @@ lerna-debug.log*
 
 node_modules
 src/components/Chat/ChatFrame.jsx
+src/components/Chat/AddToChatModal.jsx
 dist
 dist-ssr
 *.local

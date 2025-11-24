@@ -68,14 +68,14 @@ const Sidebar = () => {
       icon: <Upload className="size-4" />,
     },
     {
-      name: "Conversations",
-      path: "/conversations",
-      icon: <MessageCircleMore className="size-4" />,
-    },
-    {
       name: "Contact Teachers",
       path: "/teachers",
       icon: <Users className="size-4" />,
+    },
+    {
+      name: "Conversations",
+      path: "/conversations",
+      icon: <MessageCircleMore className="size-4" />,
     },
     { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
   ];
