@@ -1,9 +1,11 @@
 import React from "react";
 import { BookA } from 'lucide-react';
+import { Toaster } from "react-hot-toast";
 
 const AuthLayout = ({ children }) => {
   return (
     <div className="flex">
+      <Toaster position="top-center" />
       <div className="w-screen h-screen md:w-[60vw] px-12 pt-8 pb-12">
         <h2 className="text-lg font-medium text-black"></h2>
         {children}

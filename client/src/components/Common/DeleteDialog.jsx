@@ -21,7 +21,7 @@ export default function DeleteDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-red-600">{title}</DialogTitle>
+          <DialogTitle className="text-red-600 break-words max-w-[400px]">{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 

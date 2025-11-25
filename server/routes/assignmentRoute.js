@@ -5,6 +5,7 @@ import {
     deleteAllAssignmentController,
     deleteAllMaterialsAssignmentController,
     deleteAssignmentController,
+    deleteAssignmentsByCourseIdController,
     deleteOneAssignmentMaterialController,
     getAllAssignmentController,
     getAllAssignmentForStudentController,
@@ -38,6 +39,12 @@ assignmentRoute.delete("/delete-assignment/:id",
     isAuthenticated,
     isTeacher,
     deleteAssignmentController
+);
+assignmentRoute.delete(
+  "/delete-all-assignment-materials-by-courseId/:courseId",
+  isAuthenticated,
+  isTeacher,
+  deleteAssignmentsByCourseIdController
 );
 assignmentRoute.delete("/delete-all-assignments",
     isAuthenticated,

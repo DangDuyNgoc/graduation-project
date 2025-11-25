@@ -4,7 +4,7 @@ import SearchBar from "@/components/common/SearchBar";
 import DashboardLayout from "@/layout/Dashboard";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 export default function TeacherEnrolStudent() {
   const { id } = useParams();
@@ -15,6 +15,7 @@ export default function TeacherEnrolStudent() {
   const [visibleCount, setVisibleCount] = useState(15);
   const [emailsInput, setEmailsInput] = useState("");
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchStudents();
@@ -176,7 +177,13 @@ export default function TeacherEnrolStudent() {
                 className="w-full h-32 p-3 border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm resize-none rounded-md"
               ></textarea>
 
-              <div className="flex justify-end mt-3">
+              <div className="flex justify-between mt-3">
+                <button
+                  onClick={() => navigate(`/teacher-enrolled-student/${id}`)}
+                  className="px-5 py-2 bg-black text-white hover:opacity-65 transition text-sm rounded-lg shadow-sm"
+                >
+                  Back
+                </button>
                 <button
                   className="px-5 py-2 bg-blue-600 text-white hover:bg-blue-700 transition text-sm rounded-lg shadow-sm disabled:opacity-50"
                   onClick={handleBulkAdd}

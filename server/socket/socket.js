@@ -6,6 +6,10 @@ import { updateLastMessage } from "../controllers/conversationController.js";
 import userModel from "../models/userModel.js";
 import conversationModel from "../models/conversationModel.js";
 import mongoose from "mongoose";
+import chatbotConversationModel from "../models/chatbotConversationModel.js";
+import chatbotMessageModel from "../models/chatbotMessageModel.js";
+import { clearConversationCache, getChatbotReply } from "../services/chatbotService.js";
+
 
 export const setupSocket = (server) => {
   const io = new Server(server, {
@@ -203,6 +207,61 @@ export const setupSocket = (server) => {
         })
       } catch (error) {
         console.error("Error deleting message:", error);
+      }
+    });
+
+    // chatbot socket
+    socket.on("joinChatbot", () => {
+      socket.join(`chatbot-${socket.userId}`);
+    });
+
+    socket.on("chatbotMessage", async (msg) => {
+      if (!msg?.trim()) return;
+
+      try {
+        let conversation = await chatbotConversationModel.findOne({
+          user: socket.userId,
+        });
+        if (!conversation) {
+          conversation = await chatbotConversationModel.create({
+            user: socket.userId,
+            title: "Conversation with ChatBot",
+            lastMessage: "",
+            lastMessageAt: new Date(),
+          });
+        }
+
+        const userMessage = await chatbotMessageModel.create({
+          conversation: conversation._id,
+          senderType: "user",
+          text: msg,
+        });
+
+        io.to(`chatbot-${socket.userId}`).emit("receiveMessage", [ userMessage ]);
+
+        clearConversationCache(socket.userId);
+
+        const replyText = await getChatbotReply(
+          socket.userId,
+          conversation._id,
+          msg
+        );
+
+        const botMessage = await chatbotMessageModel.create({
+          conversation: conversation._id,
+          senderType: "bot",
+          text: replyText,
+        });
+
+        conversation.lastMessage = replyText;
+        conversation.lastMessageAt = new Date();
+        await conversation.save();
+
+        io.to(`chatbot-${socket.userId}`).emit("receiveMessage", [
+          botMessage,
+        ]);
+      } catch (error) {
+        console.error("Chatbot socket error:", error);
       }
     });
 
