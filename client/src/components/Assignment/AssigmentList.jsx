@@ -9,6 +9,7 @@ import {
 import {
   ChevronDown,
   ChevronUp,
+  ClipboardList,
   FileText,
   LoaderCircle,
   Pencil,
@@ -22,7 +23,7 @@ import { useNavigate } from "react-router-dom";
 import DeleteDialog from "../Common/DeleteDialog";
 import AssignmentDialog from "./AssignmentDialog";
 
-export default function AssignmentList({ courseId }) {
+export default function AssignmentList({ courseId, studentInCourse }) {
   const [assignments, setAssignments] = useState([]);
   const [expanded, setExpanded] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -36,6 +37,7 @@ export default function AssignmentList({ courseId }) {
   const [loadingDelete, setLoadingDelete] = useState(false);
 
   const menuRef = useRef(null);
+  const buttonRef = useRef(null);
 
   const navigate = useNavigate();
 
@@ -127,7 +129,12 @@ export default function AssignmentList({ courseId }) {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(e.target)
+      ) {
         setOpenMenu(false);
       }
     };
@@ -149,6 +156,7 @@ export default function AssignmentList({ courseId }) {
         <h2 className="text-xl font-semibold text-gray-800">Assignments</h2>
         <div className="relative">
           <button
+            ref={buttonRef}
             onClick={() => setOpenMenu((p) => !p)}
             className="p-2 rounded-full hover:bg-gray-100"
           >
@@ -202,12 +210,16 @@ export default function AssignmentList({ courseId }) {
                 <div className="flex justify-between items-center py-4 px-2 hover:bg-gray-50">
                   <h3
                     onClick={() => navigate(`/teacher-submissions/${item._id}`)}
-                    className="font-medium text-gray-900 cursor-pointer hover:text-blue-400"
+                    className="flex items-center gap-2 font-medium text-gray-700 cursor-pointer hover:text-blue-400"
                   >
+                    <ClipboardList className="size-6" />
                     {item.title}
                   </h3>
 
                   <div className="flex items-center gap-3">
+                    <div className="text-sm text-gray-600">
+                      Submitted: {item.submittedCount}/{studentInCourse}
+                    </div>
                     <button
                       onClick={() => {
                         setSelectedAssignment(item);

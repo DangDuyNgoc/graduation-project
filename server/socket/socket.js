@@ -143,6 +143,8 @@ export const setupSocket = (server) => {
           text: msg,
         });
 
+        io.to(`chatbot-${socket.userId}`).emit("receiveMessage", [ userMessage ]);
+
         clearConversationCache(socket.userId);
 
         const replyText = await getChatbotReply(

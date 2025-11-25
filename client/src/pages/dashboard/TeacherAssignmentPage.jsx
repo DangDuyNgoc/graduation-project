@@ -269,7 +269,10 @@ export default function TeacherAssignmentPage() {
             )}
           </div>
 
-          <AssignmentList courseId={course._id} />
+          <AssignmentList
+            courseId={course._id}
+            studentInCourse={course.studentIds?.length}
+          />
 
           <DeleteDialog
             open={openDelete}

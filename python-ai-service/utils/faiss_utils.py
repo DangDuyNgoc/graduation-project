@@ -13,7 +13,7 @@ def load_or_create_faiss_index(index_file):
     else:
         base_index = faiss.IndexFlatL2(dimension)
         idx = faiss.IndexIDMap(base_index)
-        print(f"Created new FAISS index with IDMap for {index_file}, idx {len(idx)}")
+        print(f"Created new FAISS index with IDMap for {index_file}")
     return idx
 
 

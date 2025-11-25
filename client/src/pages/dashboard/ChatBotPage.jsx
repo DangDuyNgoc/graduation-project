@@ -12,40 +12,36 @@ export default function ChatBotPage() {
   const [loading, setLoading] = useState(true);
   const [botTyping, setBotTyping] = useState(false);
   const messagesEndRef = useRef(null);
+  const socketRef = useRef(null);
 
-  const socket = getSocket();
-
-  // Join chatbot + listen for messages
   useEffect(() => {
-    if (!user?._id) return;
+    socketRef.current = getSocket();
+  }, []);
+
+  useEffect(() => {
+    if (!user?._id || !socketRef.current) return;
+    const socket = socketRef.current;
 
     socket.emit("joinChatbot");
 
     const handleReceive = (msgs) => {
-      setBotTyping(false);
-
       setMessages((prev) => {
-        const existingKeys = new Set(
-          prev.map((m) => m.createdAt + m.senderType)
-        );
-        const newMsgs = msgs.filter(
-          (m) => !existingKeys.has(m.createdAt + m.senderType)
-        );
-        return [...prev, ...newMsgs];
+        const exist = new Set(prev.map((m) => m._id));
+        const filtered = msgs.filter((m) => !exist.has(m._id));
+        return [...prev, ...filtered];
       });
+
+      if (msgs.some((m) => m.senderType === "bot")) {
+        setBotTyping(false);
+      }
     };
 
+    socket.off("receiveMessage");
     socket.on("receiveMessage", handleReceive);
+  }, [user?._id]);
 
-    return () => {
-      socket.off("receiveMessage", handleReceive);
-    };
-  }, [user?._id, socket]);
-
-  // Fetch chat history
   useEffect(() => {
     if (!user?._id) return;
-
     const fetchHistory = async () => {
       setLoading(true);
       try {
@@ -54,43 +50,33 @@ export default function ChatBotPage() {
         });
         if (data.success && data.messages) {
           setMessages((prev) => {
-            const existingKeys = new Set(
-              prev.map((m) => m.createdAt + m.senderType)
-            );
-            const filtered = data.messages.filter(
-              (m) => !existingKeys.has(m.createdAt + m.senderType)
-            );
+            const exist = new Set(prev.map((m) => m._id));
+            const filtered = data.messages.filter((m) => !exist.has(m._id));
             return [...prev, ...filtered];
           });
         }
       } catch (err) {
-        console.error("Error fetching chat history:", err);
+        console.error(err);
       } finally {
         setLoading(false);
       }
     };
-
     fetchHistory();
   }, [user?._id]);
 
-  // Auto scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages.length]);
 
-  // Send message
   const handleSend = () => {
     if (!input.trim()) return;
-
-    const newMessage = {
-      senderType: "user",
-      text: input,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, newMessage]);
-    socket.emit("chatbotMessage", input);
-    setInput("");
+    socketRef.current.emit("chatbotMessage", input);
     setBotTyping(true);
+    setInput("");
+
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
   };
 
   const handleKeyDown = (e) => {
@@ -116,18 +102,16 @@ export default function ChatBotPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col h-[calc(100vh-129.5px)] w-full border rounded shadow">
-        {/* Header */}
-        <div className="flex items-center p-3 bg-purple-600 text-white rounded-t">
+        <div className="flex items-center p-3 bg-purple-500 text-white rounded-t">
           <h2 className="font-semibold flex-1">ChatBot AI</h2>
         </div>
 
-        {/* Chat body */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
           {messages.map((msg, idx) => {
             const isUser = msg.senderType === "user";
             return (
               <div
-                key={idx}
+                key={msg._id || idx}
                 className={`flex flex-col ${
                   isUser ? "items-end" : "items-start"
                 }`}
@@ -148,17 +132,21 @@ export default function ChatBotPage() {
             );
           })}
 
-          {/* Bot typing indicator */}
           {botTyping && (
-            <div className="flex items-center space-x-1 text-sm text-gray-500 pl-2">
-              <div className="animate-pulse">Chat bot is typing...</div>
+            <div className="h-6 flex items-center pl-2 transition-opacity duration-200">
+              <div
+                className={`text-sm text-gray-500 animate-pulse ${
+                  botTyping ? "opacity-100" : "opacity-0"
+                }`}
+              >
+                Chat bot is typing...
+              </div>
             </div>
           )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
         <div className="p-3 border-t flex items-center">
           <input
             type="text"

@@ -104,16 +104,30 @@ export const getAssignmentByCourseController = async (req, res) => {
             })
         };
 
-        const assignment = await assignmentModel.find({ courseId: id })
+        const assignments = await assignmentModel.find({ courseId: id })
             .populate("createdBy")
             .sort({ createdAt: -1 });
 
-        if (assignment.length === 0) {
+        if (assignments.length === 0) {
             return res.status(404).send({
                 success: false,
                 message: "Assignment not found"
             })
         };
+
+        const assignment = await Promise.all(
+          assignments.map(async (assignment) => {
+            const submittedCount = await submissionModel.countDocuments({
+              assignment: assignment._id,
+              status: "Submitted",
+            });
+
+            return {
+              ...assignment._doc,
+              submittedCount,
+            };
+          })
+        );
 
         res.status(200).send({
             success: true,
