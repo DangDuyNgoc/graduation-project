@@ -16,7 +16,7 @@ export default function VerifyCode() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const { email } = location.state || {};
+  const { email, mode } = location.state || {};
   let token = location.state?.token;
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function VerifyCode() {
   useEffect(() => {
     let timer;
     if (countdown > 0) {
-      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000);
     }
     return () => clearTimeout(timer);
   }, [countdown]);
@@ -72,8 +72,13 @@ export default function VerifyCode() {
     setLoading(true);
 
     try {
-      await api.post("/user/verify-otp", { token, otp });
-      navigate("/reset-password", { state: { token } });
+      if (mode === "register") {
+        await api.post("/user/validate-registration", { email, otp, token });
+        navigate("/login", { state: { verified: true } });
+      } else {
+        await api.post("/user/verify-otp", { token, otp });
+        navigate("/reset-password", { state: { token } });
+      }
     } catch (err) {
       setError(err?.response?.data?.message || "Invalid code. Try again.");
     } finally {
@@ -89,15 +94,27 @@ export default function VerifyCode() {
     setSuccess("");
 
     try {
-      const { data } = await api.post("/user/request-password-reset", {
-        email,
-      });
-      token = data.token;
-      location.state.token = data.token;
+      let res;
+
+      if (mode === "register") {
+        res = await api.post("/user/resend-register-otp", { email });
+      } else {
+        res = await api.post("/user/request-password-reset", { email });
+      }
+
+      token = res.data.token;
+      location.state.token = res.data.token;
+
+      if (res.data.cooldown) {
+        setCountdown(Math.ceil(res.data.remaining / 1000));
+        setError("Please wait before resending.");
+        setResending(false);
+        return;
+      }
+
       setSuccess("Code resent! Please check your email.");
       setCode(["", "", "", ""]);
       inputsRef.current[0]?.focus();
-
       setCountdown(60);
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to resend code.");

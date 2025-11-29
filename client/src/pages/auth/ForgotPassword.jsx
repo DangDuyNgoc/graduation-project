@@ -30,7 +30,11 @@ export default function ForgotPassword() {
         email,
       });
       navigate("/verify-code", {
-        state: { email, token: data.token },
+        state: {
+          email,
+          token: data.token,
+          mode: "forgot",
+        },
       });
     } catch (err) {
       setError(

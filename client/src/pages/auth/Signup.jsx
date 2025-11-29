@@ -1,11 +1,9 @@
-import React, { useContext, useState } from "react";
-import { Eye, LoaderCircle } from "lucide-react";
-import { EyeOff } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle } from "lucide-react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import AuthLayout from "../../components/AuthLayout";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -15,10 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { validateEmail } from "@/utils/helper";
 import api from "@/utils/axiosInstance";
-import { UserContext } from "@/context/UserContext";
-import { connectSocket } from "@/utils/socket";
+import { validateEmail } from "@/utils/helper";
+import AuthLayout from "../../components/AuthLayout";
 
 const Signup = () => {
   const [fullName, setFullName] = useState("");
@@ -33,7 +30,6 @@ const Signup = () => {
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
-  const { updateUser } = useContext(UserContext);
 
   const togglePassword = () => {
     setShowPassword(!showPassword);
@@ -97,13 +93,16 @@ const Signup = () => {
         { withCredentials: true }
       );
 
-      const token = data.accessToken;
-      const userInfo = data.user;
+      const token = data.token;
 
       if (token) {
-        updateUser(userInfo);
-        connectSocket();
-        navigate("/dashboard");
+        navigate("/verify-code", {
+          state: {
+            email,
+            token: data.token,
+            mode: "register",
+          },
+        });
       }
     } catch (error) {
       console.log("Signup failed", error);

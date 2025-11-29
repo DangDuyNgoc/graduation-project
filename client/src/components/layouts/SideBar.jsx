@@ -39,11 +39,6 @@ const Sidebar = () => {
       icon: <GraduationCap className="size-4" />,
     },
     {
-      name: "Conversations",
-      path: "/conversations",
-      icon: <MessageCircleMore className="size-4" />,
-    },
-    {
       name: "ChatBot AI",
       path: "/chatbot-ai",
       icon: <Bot className="size-4" />,
@@ -74,19 +69,11 @@ const Sidebar = () => {
       icon: <Upload className="size-4" />,
     },
     {
-<<<<<<< HEAD
-=======
-      name: "Conversations",
-      path: "/conversations",
-      icon: <MessageCircleMore className="size-4" />,
-    },
-    {
       name: "ChatBot AI",
       path: "/chatbot-ai",
       icon: <Bot className="size-4" />,
     },
     {
->>>>>>> Hoang
       name: "Contact Teachers",
       path: "/teachers",
       icon: <Users className="size-4" />,
