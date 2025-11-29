@@ -8,8 +8,10 @@ import {
     refreshTokenController,
     registrationController,
     requestResetPasswordController,
+    resendRegisterOtpController,
     updateUserController,
     uploadAvatarController,
+    validateRegisterController,
     verifyOtpController
 } from '../controllers/authController.js';
 import { isAuthenticated } from '../middlewares/authMiddleware.js';
@@ -18,6 +20,8 @@ import uploadImage from '../middlewares/uploadImage.js';
 const userRouter = express.Router();
 
 userRouter.post("/registration", registrationController);
+userRouter.post("/validate-registration", validateRegisterController);
+userRouter.post("/resend-register-otp", resendRegisterOtpController);
 userRouter.post("/login", loginController);
 userRouter.get("/logout", logoutController);
 userRouter.post("/upload-avatar", isAuthenticated, uploadImage.single("avatar"), uploadAvatarController);

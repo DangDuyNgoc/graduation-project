@@ -1,10 +1,10 @@
 import jwt from "jsonwebtoken";
 import cloudinary from "cloudinary";
 import { createAccessToken, createRefreshToken, sendToken } from "../config/jwt.js";
-import { hashPassword, comparePassword } from "../helper/auth.js";
+import { hashPassword, comparePassword, pendingUsers } from "../helper/auth.js";
 import userModel from "../models/userModel.js";
 import uploadImageCloudinary from "../utils/uploadImage.js";
-import { generateOtp } from "../utils/generateOtp.js";
+import { generateOtp, generateOtpReg } from "../utils/generateOtp.js";
 import { fileURLToPath } from "url";
 import path from "path";
 import { sendEmail } from "../utils/sendEmail.js";
@@ -14,50 +14,192 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const registrationController = async (req, res) => {
-    try {
-        const { name, email, password, role } = req.body;
-        if (!name || !email || !password, !role) {
-            return res.status(400).send({
-                success: false,
-                message: "All fields are required"
-            });
-        }
+  try {
+    const { name, email, password, role } = req.body;
 
-        // check if user already exists
-        const existingUser = await userModel.findOne({ email });
-        if (existingUser) {
-            return res.status(400).send({
-                success: false,
-                message: "User already exists"
-            });
-        }
-
-        // hash the password
-        const hashedPassword = await hashPassword(password);
-
-        // create new user
-        const newUser = await userModel.create({
-            name, email, password: hashedPassword, role
-        });
-
-        const accessToken = createAccessToken(newUser._id);
-        const refreshToken = createRefreshToken(newUser._id);
-        sendToken(res, accessToken, refreshToken);
-
-        return res.status(200).send({
-            success: true,
-            message: "User registered successfully",
-            user: newUser,
-            accessToken: accessToken,
-            refreshToken: refreshToken
-        })
-    } catch (error) {
-        console.error("Registration error:", error);
-        return res.status(500).send({
-            success: false,
-            message: "Internal server error"
-        })
+    if (!name || !email || !password || !role) {
+      return res.status(400).send({
+        success: false,
+        message: "All fields are required",
+      });
     }
+
+    const existingUser = await userModel.findOne({ email });
+    const pendingUser = pendingUsers.get(email);
+
+    if (existingUser) {
+      return res.status(400).send({
+        success: false,
+        message: "User already exists",
+      });
+    }
+
+    if (pendingUser) {
+      pendingUsers.delete(email);
+    }
+
+    const hashedPassword = await hashPassword(password);
+    const tokenData = generateOtpReg({ email });
+    const otp = tokenData.otp;
+
+    pendingUsers.set(email, {
+      name,
+      email,
+      password: hashedPassword,
+      role,
+      token: tokenData.token,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      resendCooldown: Date.now() + 60 * 1000,
+    });
+
+    await sendEmail({
+      email,
+      subject: "Registering Email Verification",
+      template: "verifyCodeOtp.ejs",
+      data: { otp },
+    });
+
+    return res.status(200).send({
+      success: true,
+      message: `Please check your email: ${email} to verify your account.`,
+      token: tokenData.token,
+    });
+  } catch (error) {
+    pendingUsers.delete(req.body.email);
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+export const validateRegisterController = async (req, res) => {
+  try {
+    const { email, otp, token } = req.body;
+
+    const pendingUser = pendingUsers.get(email);
+    if (!pendingUser) {
+      return res.status(400).send({
+        success: false,
+        message: "No pending registration found",
+      });
+    }
+
+    if (!otp || !token) {
+      return res.status(400).send({
+        success: false,
+        message: "OTP and token are required",
+      });
+    }
+
+    if (pendingUser.expiresAt < Date.now()) {
+      pendingUsers.delete(email);
+      return res.status(400).send({
+        success: false,
+        message: "OTP expired. Please register again.",
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      return res.status(403).send({
+        success: false,
+        message: "Invalid or expired token",
+      });
+    }
+
+    if (decoded.email !== email) {
+      return res.status(400).send({
+        success: false,
+        message: "Email does not match token",
+      });
+    }
+
+    if (decoded.otp !== otp) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid OTP",
+      });
+    }
+
+    await userModel.create({
+      name: pendingUser.name,
+      email: pendingUser.email,
+      password: pendingUser.password,
+      role: pendingUser.role,
+    });
+
+    pendingUsers.delete(email);
+
+    return res.status(200).send({
+      success: true,
+      message: "Email verified and user registered successfully",
+    });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+export const resendRegisterOtpController = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const pendingUser = pendingUsers.get(email);
+    if (!pendingUser) {
+      return res.status(400).send({
+        success: false,
+        message: "No pending registration found",
+      });
+    }
+
+    const now = Date.now();
+
+    if (pendingUser.resendCooldown > now) {
+      return res.status(429).send({
+        success: false,
+        message: "Please wait before requesting another OTP",
+        cooldownLeft: pendingUser.resendCooldown - now,
+      });
+    }
+
+    if (pendingUser.expiresAt > now) {
+      return res.status(400).send({
+        success: false,
+        message: "OTP is still valid",
+        remainingTime: pendingUser.expiresAt - now,
+      });
+    }
+
+    const tokenData = generateOtpReg({ email });
+    const otp = tokenData.otp;
+
+    pendingUser.token = tokenData.token;
+    pendingUser.expiresAt = now + 10 * 60 * 1000;
+    pendingUser.resendCooldown = now + 60 * 1000;
+
+    await sendEmail({
+      email,
+      subject: "Resend Email Verification",
+      template: "verifyCodeOtp.ejs",
+      data: { otp },
+    });
+
+    return res.status(200).send({
+      success: true,
+      message: "OTP resent successfully",
+      token: tokenData.token,
+    });
+  } catch (error) {
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error",
+    });
+  }
 };
 
 export const loginController = async (req, res) => {

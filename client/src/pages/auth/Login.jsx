@@ -1,7 +1,7 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { Eye, LoaderCircle } from "lucide-react";
 import { EyeOff } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 
 import AuthLayout from "../../components/AuthLayout";
 import { Input } from "@/components/ui/input";
@@ -17,15 +17,23 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { updateUser } = useContext(UserContext);
 
   const togglePassword = () => {
     setShowPassword(!showPassword);
   };
 
-  const handleSignup = async (e) => {
+  useEffect(() => {
+    if (location.state?.verified) {
+      setMessage("Email verified! You can now login.");
+    }
+  }, [location.state]);
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
 
@@ -40,7 +48,7 @@ const Login = () => {
       setLoading(false);
       return;
     }
-    setError(null);
+    setError("");
 
     try {
       const { data } = await api.post(
@@ -60,10 +68,10 @@ const Login = () => {
         connectSocket();
         navigate("/dashboard");
       }
-    } catch (error) {
-      console.log("Login failed", error);
+    } catch (err) {
+      console.log("Login failed", err);
       setError(
-        error?.response?.data?.message || "Login failed. Please try again."
+        err?.response?.data?.message || "Login failed. Please try again."
       );
       setLoading(false);
     }
@@ -77,7 +85,7 @@ const Login = () => {
           Please enter your details to login
         </p>
 
-        <form className="space-y-6" onSubmit={handleSignup}>
+        <form className="space-y-6" onSubmit={handleLogin}>
           <div className="w-full">
             <label className="text-sm font-medium text-gray-700 mb-2">
               Email Address
@@ -116,6 +124,7 @@ const Login = () => {
             </span>
           </div>
 
+          {message && <p className="text-green-500 text-sm">{message}</p>}
           {/* error message */}
           {error && <p className="text-red-500 text-sm">{error}</p>}
 

@@ -79,14 +79,6 @@ export default function AssignmentList({ courseId, studentInCourse }) {
         setOpenDelete(false);
         return;
       }
-<<<<<<< HEAD
-    } catch (err) {
-      console.log("Error deleting assignment", err);
-      toast.error("Error deleting assignment");
-    } finally {
-      setLoadingDelete(false);
-      setOpenDelete(false);
-=======
 
       if (deleteType === "assignment") {
         const res = await deleteAssignment(deleteTarget._id);
@@ -129,7 +121,6 @@ export default function AssignmentList({ courseId, studentInCourse }) {
       }
     } catch {
       toast.error("Error deleting");
->>>>>>> Hoang
     }
 
     setLoadingDelete(false);

@@ -14,3 +14,5 @@ export const hashPassword = async (password) => {
 export const comparePassword = async (password, hashPassword) => {
     return bcrypt.compare(password, hashPassword);
 }
+
+export const pendingUsers = new Map();
