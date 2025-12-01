@@ -44,3 +44,37 @@ export const deleteAssignment = async (assignmentId) => {
   );
   return data;
 };
+
+export const deleteAllAssignmentByCourseId = async (courseId) => {
+  const { data } = await api.delete(
+    `/assignment/delete-all-assignment-materials-by-courseId/${courseId}`,
+    {
+      withCredentials: true,
+    }
+  );
+  return data;
+};
+
+export const deleteOneAssignmentMaterial = async (
+  assignmentId,
+  materialKey
+) => {
+  const { data } = await api.delete(
+    `/assignment/delete-one-assignment-material`,
+    {
+      withCredentials: true,
+      data: { assignmentId, materialKey },
+    }
+  );
+  return data;
+};
+
+export const deleteAllMaterialsAssignment = async (assignmentId) => {
+  const { data } = await api.delete(
+    `/assignment/delete-all-assignment-materials/${assignmentId}`,
+    {
+      withCredentials: true,
+    }
+  );
+  return data;
+};
