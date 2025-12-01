@@ -1,5 +1,10 @@
 import express from "express";
-import { getMessageByConversationController, sendMessageController } from "../controllers/messageController.js";
+import {
+    getMessageByConversationController,
+    getUnreadMessageCountController,
+    markConversationAsReadController,
+    sendMessageController
+} from "../controllers/messageController.js";
 import { isAuthenticated } from "../middlewares/authMiddleware.js";
 import uploadMaterials from "../middlewares/uploadMaterials.js";
 
@@ -11,5 +16,7 @@ messageRoute.post("/send",
     sendMessageController
 );
 messageRoute.get("/get-message/:conversationId", isAuthenticated, getMessageByConversationController);
+messageRoute.post("/mark-read/:conversationId", isAuthenticated, markConversationAsReadController);
+messageRoute.get("/get-unread-message", isAuthenticated, getUnreadMessageCountController);
 
 export default messageRoute;

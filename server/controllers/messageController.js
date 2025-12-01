@@ -63,10 +63,12 @@ export const getMessageByConversationController = async (req, res) => {
         const messageModel = getMessageModel();
 
         const messages = await messageModel.find({ conversation: conversationId })
-            .populate("sender", "name email role avatar")
+            .populate({
+                path: "sender",
+                select: "name email role avatar"
+            })
             .populate("attachments", "title s3_url key fileType")
             .sort({ createdAt: -1 })
-
         res.status(200).send({
             success: true,
             message: "get message successfully",
@@ -80,3 +82,78 @@ export const getMessageByConversationController = async (req, res) => {
         })
     }
 };
+
+export const markConversationAsReadController = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { conversationId } = req.params;
+
+        if (!conversationId) {
+            return res.status(400).send({
+                success: false,
+                message: "conversationId is required"
+            });
+        };
+
+        const messageModel = getMessageModel();
+
+        await messageModel.updateMany(
+            {
+                conversation: conversationId,
+                readBy: { $ne: userId },
+            },
+            {
+                $push: { readBy: userId }
+            }
+        );
+
+        res.status(200).send({
+            success: true,
+            message: "Marked conversation as read successfully"
+        });
+    } catch (error) {
+        console.log("Error in mark conversation as read: ", error);
+        return res.status(500).send({
+            success: true,
+            message: "Internal server error"
+        })
+    }
+}
+
+export const getUnreadMessageCountController = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const messageModel = getMessageModel();
+
+        const conversation = await messageModel.aggregate([
+            {
+                $match: {
+                    sender: { $ne: userId },
+                    readBy: { $nin: [userId] }
+                }
+            },
+            {
+                $group: {
+                    _id: "$conversation"
+                }
+            },
+            {
+                $count: "unreadConversationCount"
+            }
+        ]);
+
+        const unreadConversationCount = conversation[0]?.unreadConversationCount || 0;
+
+        res.status(200).send({
+            success: true,
+            message: "Get unread message count successfully",
+            unreadConversationCount,
+        });
+    } catch (error) {
+        console.log("Error in get unread message count: ", error);
+        return res.status(500).send({
+            success: false,
+            message: "Internal server error"
+        });
+    }
+}

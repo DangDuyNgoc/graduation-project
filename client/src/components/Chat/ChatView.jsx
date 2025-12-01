@@ -49,16 +49,15 @@ const ChatView = ({
     if (!conversationId) return;
 
     setMessages([]);
-
     socket.emit("joinConversation", conversationId);
+    fetchMessage();
+
+    socket.emit("markAsRead", { conversationId });
 
     console.log("Socket connected?", socket.connected);
     console.log("Joining conversationId:", conversationId);
 
-    fetchMessage();
-
     socket.on("receiveMessage", (newMessage) => {
-      console.log("Received:", newMessage);
       setMessages((prev) => [...prev, newMessage]);
     });
 
@@ -121,6 +120,11 @@ const ChatView = ({
       socket.off("messageDeleted");
     };
   }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId || !socket) return;
+    socket.emit("markAsRead", { conversationId });
+  }, [conversationId, messages.length]);
 
   const messagesEndRef = useRef(null);
   const pickerRef = useRef(null);
@@ -306,22 +310,24 @@ const ChatView = ({
       }`}
     >
       {/* Header */}
-      <div className="flex items-center p-0.5 bg-primary text-white rounded-t-lg fixed w-full z-10">
-        <div className="w-8 h-8 rounded-full overflow-hidden border-2 mr-2">
-          <Avatar className="w-20 h-20">
-            <AvatarImage
-              src={
-                teacher?.avatar?.url ||
-                "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
-              }
-              alt="avatar image"
-            />
-          </Avatar>
+      <div className="flex items-center justify-between p-0.5 bg-primary text-white rounded-t-lg sticky top-0 w-full z-10">
+        <div className="flex items-center">
+          <div className="w-8 h-8 rounded-full overflow-hidden border-2 mr-2">
+            <Avatar className="w-20 h-20">
+              <AvatarImage
+                src={
+                  teacher?.avatar?.url ||
+                  "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
+                }
+                alt="avatar image"
+              />
+            </Avatar>
+          </div>
+          <h3 className="font-semibold text-sm">{teacher.name}</h3>
         </div>
-        <h3 className="font-semibold flex-1 text-sm">{teacher.name}</h3>
         <button
           onClick={onClose}
-          className="text-white hover:text-gray-200 mr-4"
+          className="text-white hover:text-gray-200 ml-4 flex-shrink-0"
         >
           <X size={18} />
         </button>

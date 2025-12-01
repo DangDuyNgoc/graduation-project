@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import conversationModel from "../models/conversationModel.js";
+import { getMessageModel } from "../helper/getMessageModel.js";
 
 export const createOrGetConversation = async (req, res) => {
     try {
@@ -62,13 +63,34 @@ export const createOrGetConversation = async (req, res) => {
 export const getAllUserConversations = async (req, res) => {
     try {
         const { userId } = req.params;
+
+        const messageModel = getMessageModel();
+
         const conversations = await conversationModel.find({
             participants: userId,
             deletedFor: { $ne: userId }
         })
             .populate("participants", "name email role avatar")
-            .populate("lastMessage", "text attachments createdAt")
             .sort({ updatedAt: -1 })
+            .lean();
+
+        // unread count for each conversation
+        for (let conv of conversations) {
+            const lastMessage = await messageModel.findOne({ conversation: conv._id })
+                .sort({ createdAt: -1 })
+                .populate("sender", "name avatar email _id")
+                .lean();
+
+            conv.lastMessageObj = lastMessage;
+
+            const unread = await messageModel.countDocuments({
+                conversation: conv._id,
+                sender: { $ne: userId },
+                readBy: { $ne: userId },
+            }).lean();
+
+            conv.unreadCount = unread;
+        }
 
         return res.status(200).send({
             success: true,

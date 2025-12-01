@@ -63,12 +63,12 @@ function TeachersPage() {
         },
         { withCredentials: true }
       );
-      setSelectedTeacher(teacher);
       if (!data.conversation) {
         setConversationId(null);
         return;
       }
-
+      
+      setSelectedTeacher(teacher);
       setConversationId(data.conversation._id);
     } catch (error) {
       console.error("Error creating or getting conversation:", error);

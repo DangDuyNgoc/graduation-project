@@ -11,9 +11,14 @@ import {
 } from "lucide-react";
 import api from "@/utils/axiosInstance";
 import { UserContext } from "@/context/UserContext";
+import { getSocket } from "@/utils/socket";
 
 const Sidebar = () => {
   const [assignment, setAssignment] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+
+  const socket = getSocket();
+
   const { user } = useContext(UserContext);
 
   const fetchAssignments = async () => {
@@ -27,9 +32,35 @@ const Sidebar = () => {
     }
   };
 
+  const fetchUnreadMessages = async () => {
+    try {
+      const { data } = await api.get("/message/get-unread-message", {
+        withCredentials: true,
+      });
+
+      if (data.success) {
+        setUnreadMessages(data.unreadConversationCount);
+        console.log("Unread messages fetched:", data.unreadConversationCount);
+      }
+    } catch (error) {
+      console.error("Error fetching unread message count:", error);
+    }
+  };
+
   useEffect(() => {
     fetchAssignments();
+    fetchUnreadMessages();
   }, []);
+
+  // real time
+  useEffect(() => {
+    if (!socket) return;
+    socket.on("unreadUpdated", () => {
+      fetchUnreadMessages();
+    });
+
+    return () => socket.off("unreadUpdated");
+  }, [socket]);
 
   const teacherMenu = [
     {
@@ -47,6 +78,7 @@ const Sidebar = () => {
       name: "Conversations",
       path: "/conversations",
       icon: <MessageCircleMore className="size-4" />,
+      showCount: true,
     },
   ];
 
@@ -76,6 +108,7 @@ const Sidebar = () => {
       name: "Conversations",
       path: "/conversations",
       icon: <MessageCircleMore className="size-4" />,
+      showCount: true,
     },
     { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
   ];
@@ -100,11 +133,20 @@ const Sidebar = () => {
             {item.icon}
             <span className="relative">
               {item.name}
-              {item.showCount && assignment > 0 && (
-                <span className="absolute -top-2 -right-4.5 bg-red-500 text-white text-xs font-semibold rounded-full px-2 py-0.5">
-                  {assignment}
-                </span>
-              )}
+              {item.showCount &&
+                item.path === "/assignments" &&
+                assignment > 0 && (
+                  <span className="absolute -top-2 -right-4.5 bg-red-500 text-white text-xs font-semibold rounded-full px-2 py-0.5">
+                    {assignment}
+                  </span>
+                )}
+              {item.showCount &&
+                item.path === "/conversations" &&
+                unreadMessages > 0 && (
+                  <span className="absolute -top-2 -right-4.5 bg-red-500 text-white text-xs font-semibold rounded-full px-2 py-0.5">
+                    {unreadMessages}
+                  </span>
+                )}
             </span>
           </NavLink>
         ))}

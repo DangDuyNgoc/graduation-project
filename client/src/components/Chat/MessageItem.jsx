@@ -13,7 +13,6 @@ const MessageItem = ({
   handleDeleteMessage,
   setLightboxImage,
 }) => {
-  console.log(msg.createdAt);
   return (
     <div className={`flex mb-2 ${isMine ? "justify-end" : "justify-start"} `}>
       {!isMine && (
@@ -40,7 +39,7 @@ const MessageItem = ({
         {msg.isDeleted ? (
           isMine ? (
             <p className="italic text-gray-400 text-sm border border-gray-200 rounded-full p-2">
-              You deleted this message
+              You deleted a message
             </p>
           ) : (
             msg.text?.trim() !== "" && (
@@ -136,7 +135,7 @@ const MessageItem = ({
 
         {isMine && isLastMessage && (
           <div className="text-[10px] text-gray-500 text-right mt-0.5">
-            {msg.readBy?.length === 0 ? (
+            {msg.readBy?.length === 1 ? (
               <span>Sent {getTimeAgo(msg.createdAt)}</span>
             ) : null}
           </div>

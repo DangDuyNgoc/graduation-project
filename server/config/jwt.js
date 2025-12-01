@@ -17,7 +17,7 @@ export const sendToken = (res, accessToken, refreshToken) => {
         httpOnly: true,
         sameSite: "lax",
         secure: true,
-        maxAge: 2 * 60 * 1000 // 4 hours
+        maxAge: 4 * 60 * 60 * 1000 // 4 hours
     })
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,

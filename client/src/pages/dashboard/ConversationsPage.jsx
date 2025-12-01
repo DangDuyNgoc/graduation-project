@@ -9,7 +9,7 @@ import { getSocket } from "@/utils/socket";
 import { formatTimeMessage } from "@/utils/timeFormatter";
 import { Avatar, AvatarImage } from "@radix-ui/react-avatar";
 import { LoaderCircle, Trash2 } from "lucide-react";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 const ConversationsPage = () => {
@@ -24,93 +24,11 @@ const ConversationsPage = () => {
 
   const socket = getSocket();
 
+  const openConversationRef = useRef(openConversation);
+
   useEffect(() => {
-    socket.on("receiveMessage", (message) => {
-      setConversationToDelete((prev) => {
-        const convExists = prev.some(
-          (conv) => conv._id.toString() === message.conversation.toString()
-        );
-
-        if (!convExists) {
-          return [
-            {
-              _id: message.conversation.toString(),
-              lastMessage: message.text,
-              lastMessageAt: message.createdAt,
-              lastMessageSender: message.sender._id,
-              participants: [user._id, message.sender._id],
-            },
-            ...prev,
-          ];
-        }
-      });
-    });
-
-    // update conversation
-    socket.on(
-      "conversationUpdated",
-      ({ conversationId, lastMessage, lastMessageAt, lastMessageSender }) => {
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv._id === conversationId
-              ? { ...conv, lastMessage, lastMessageAt, lastMessageSender }
-              : conv
-          )
-        );
-      }
-    );
-
-    // socket.on("receiveMessage", (message) => {
-    //   setConversations((prev) => {
-    //     const convExists = prev.some(
-    //       (conv) => conv._id.toString() === message.conversation.toString()
-    //     );
-    //     if (!convExists) {
-    //       return [
-    //         {
-    //           _id: message.conversation.toString(),
-    //           lastMessage: message.text,
-    //           lastMessageAt: message.createdAt,
-    //           lastMessageSender: message.sender._id,
-    //           participants: [user._id, message.sender._id],
-    //         },
-    //         ...prev,
-    //       ];
-    //     }
-    //     return prev.map((conv) =>
-    //       conv._id.toString() === message.conversation.toString()
-    //         ? {
-    //             ...conv,
-    //             lastMessage: message.text,
-    //             lastMessageAt: message.createdAt,
-    //             lastMessageSender: message.sender._id,
-    //           }
-    //         : conv
-    //     );
-    //   });
-    // });
-
-    socket.on("messageDeleted", (updated) => {
-      setConversations((prev) =>
-        prev.map((conv) =>
-          conv._id === updated.conversation.toString()
-            ? { ...conv, lastMessage: updated.text }
-            : conv
-        )
-      );
-    });
-    return () => {
-      socket.off("conversationUpdated");
-      socket.off("receiveMessage");
-      socket.off("messageDeleted");
-    };
-  }, []);
-
-  const filteredConversation = conversations.filter((conv) => {
-    const otherUser = conv.participants.find((p) => p._id !== user._id);
-    const searchName = otherUser?.name || conv.name || "";
-    return searchName.toLowerCase().includes(searchKey.toLowerCase());
-  });
+    openConversationRef.current = openConversation;
+  }, [openConversation]);
 
   const fetchConversations = async () => {
     setLoading(true);
@@ -122,7 +40,10 @@ const ConversationsPage = () => {
         }
       );
       if (data.success) {
-        setConversations(data.conversations.filter((conv) => conv.lastMessage));
+        setConversations(data.conversations);
+        data.conversations.forEach((conv) => {
+          socket.emit("joinConversation", conv._id);
+        });
       }
     } catch (error) {
       console.log("Error fetching conversations:", error);
@@ -133,7 +54,105 @@ const ConversationsPage = () => {
 
   useEffect(() => {
     fetchConversations();
-  }, [user._id]);
+  }, [user]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReceiveMessage = (message) => {
+      setConversations((prev) => {
+        const exists = prev.some(
+          (c) => c._id.toString() === message.conversation.toString()
+        );
+
+        if (!exists) {
+          return [
+            {
+              _id: message.conversation.toString(),
+              lastMessageObj: { ...message },
+              lastMessageAt: message.createdAt,
+              participants: [user, message.sender],
+              unreadCount: 1,
+            },
+            ...prev,
+          ];
+        }
+
+        return prev.map((conv) => {
+          if (conv._id.toString() === message.conversation.toString()) {
+            const isOpen = openConversationRef.current === conv._id.toString();
+
+            return {
+              ...conv,
+              lastMessageObj: { ...message },
+              lastMessageAt: message.createdAt,
+              unreadCount: isOpen ? 0 : (conv.unreadCount || 0) + 1,
+            };
+          }
+          return conv;
+        });
+      });
+    };
+
+    const handleUnreadUpdated = ({ conversationId }) => {
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv._id.toString() === conversationId
+            ? { ...conv, unreadCount: 0 }
+            : conv
+        )
+      );
+    };
+
+    socket.on("receiveMessage", handleReceiveMessage);
+
+    socket.on("unreadUpdated", handleUnreadUpdated);
+
+    // update conversation
+    socket.on("conversationUpdated", (data) => {
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv._id.toString() === data.conversationId
+            ? {
+                ...conv,
+                lastMessageObj: {
+                  ...conv.lastMessageObj,
+                  text: data.lastMessage,
+                  createdAt: data.lastMessageAt,
+                  sender: { _id: data.lastMessageSender },
+                },
+                lastMessageAt: data.lastMessageAt,
+                unreadCount: data.unreadCount,
+              }
+            : conv
+        )
+      );
+    });
+
+    socket.on("messageDeleted", (message) => {
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv._id.toString() === message.conversation.toString()
+            ? { ...conv, lastMessageObj: message }
+            : conv
+        )
+      );
+    });
+    return () => {
+      socket.off("conversationUpdated");
+      socket.off("receiveMessage", handleReceiveMessage);
+      socket.off("messageDeleted");
+      socket.off("unreadUpdated", handleUnreadUpdated);
+    };
+  }, [socket, openConversation, user]);
+
+  const filteredConversation = conversations.filter((conv) => {
+    if (!conv.lastMessageObj) return false;
+
+    const otherUser = conv.participants.find((p) => p._id !== user._id);
+    const searchName = otherUser?.name || conv.name || "";
+    return searchName.toLowerCase().includes(searchKey.toLowerCase());
+  });
 
   const openDeleteDialog = (conversationId) => {
     setConversationToDelete(conversationId);
@@ -176,6 +195,17 @@ const ConversationsPage = () => {
     }
   };
 
+  // render last message
+  const getLastMessageText = (conversation) => {
+    const msg = conversation.lastMessageObj;
+    if (!msg) return "No messages yet.";
+    if (msg.attachements?.length > 0) {
+      return "Attachment";
+    }
+    if (msg.text) return msg.text;
+    return "No messages yet.";
+  };
+
   return (
     <DashboardLayout>
       <div className="flex overflow-hidden">
@@ -199,25 +229,38 @@ const ConversationsPage = () => {
           ) : (
             <ul>
               {filteredConversation.map((conv) => {
-                const displayName = conv.participants.find(
-                  (p) => p._id !== user._id
-                )?.name;
+                const other = conv.participants.find((p) => p._id !== user._id);
+
+                const preview = getLastMessageText(conv);
+
+                const isSender = conv.lastMessageObj?.sender?._id === user._id;
 
                 const avatar = conv.participants.find((p) => p._id !== user._id)
                   ?.avatar?.url;
 
-                const unreadObj = conv.unreadMessages?.find(
-                  (um) => um.user === user._id
-                );
-                const unreadCount = unreadObj?.count || 0;
+                const unreadCount = conv.unreadCount || 0;
+                console.log("unread: ", conv.unreadCount);
 
                 return (
-                  <div className="relative" key={conv._id}>
+                  <div key={conv._id}>
                     <Card
                       className={`hover:shadow-md transition-all cursor-pointer mb-2 ${
                         unreadCount ? "bg-blue-50" : "bg-white"
                       }`}
-                      onClick={() => setOpenConversation(conv._id)}
+                      onClick={() => {
+                        setOpenConversation(conv._id.toString());
+                        openConversationRef.current = conv._id.toString();
+                        setConversations((prev) =>
+                          prev.map((c) =>
+                            c._id.toString() === conv._id.toString()
+                              ? { ...c, unreadCount: 0 }
+                              : c
+                          )
+                        );
+                        socket.emit("markAsRead", {
+                          conversationId: conv._id.toString(),
+                        });
+                      }}
                     >
                       <button
                         onClick={(e) => {
@@ -232,33 +275,37 @@ const ConversationsPage = () => {
                         />
                       </button>
 
-                      <CardContent className="flex items-center gap-3 p-3">
-                        <Avatar className="w-10 h-10">
-                          <AvatarImage
-                            src={
-                              avatar ||
-                              "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
-                            }
-                            alt="avatar image"
-                          />
-                        </Avatar>
+                      <CardContent className="flex items-center gap-3 p-3 relative">
+                        <div className="relative w-12 h-12 rounded-full overflow-hidden border-2 mr-2">
+                          <Avatar>
+                            <AvatarImage
+                              src={
+                                avatar ||
+                                "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
+                              }
+                              alt="avatar image"
+                            />
+                          </Avatar>
+                        </div>
                         <div className="flex-1">
-                          <p className="font-semibold">{displayName}</p>
+                          <p className="font-semibold">{other?.name}</p>
+                          <div className="absolute top-1 left-1">
+                            {unreadCount > 0 && (
+                              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                {unreadCount}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center">
-                            <p className="text-sm text-gray-600 truncate mr-1 w-[140px]">
-                              {conv.lastMessageSender === user._id
-                                ? `You: ${conv.lastMessage}`
-                                : conv.lastMessage}
+                            <p className="text-sm text-gray-600 truncate mr-1 w-[130px]">
+                              {isSender ? `You: ${preview}` : preview}
                             </p>
 
                             <div className="flex items-center gap-2">
-                              {unreadCount > 0 && (
-                                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                  {unreadCount}
-                                </span>
-                              )}
                               <p className="text-gray-600 text-xs">
-                                {formatTimeMessage(conv.lastMessageAt)}
+                                {formatTimeMessage(
+                                  conv.lastMessageObj?.createdAt
+                                )}
                               </p>
                             </div>
                           </div>

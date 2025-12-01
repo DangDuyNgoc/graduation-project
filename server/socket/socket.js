@@ -44,6 +44,7 @@ export const setupSocket = (server) => {
       console.log(`User joined conversation ${conversationId}`);
     });
 
+    // join user room for personal notification
     socket.join(socket.userId.toString());
 
     socket.on("leaveConversation", (conversationId) => {
@@ -62,6 +63,7 @@ export const setupSocket = (server) => {
       socket.to(conversationId).emit("userStopTyping", { userId: socket.userId });
     })
 
+    // send message
     socket.on("sendMessage", async (data) => {
       try {
         const { conversationId, text, attachments } = data;
@@ -80,7 +82,7 @@ export const setupSocket = (server) => {
         await updateLastMessage(conversationId, text, attachments, socket.userId);
 
         const populatedMessage = await newMessage.populate([
-          { path: "sender", select: "name email role" },
+          { path: "sender", select: "name email role avatar" },
           { path: "attachments" }
         ]);
 
@@ -90,11 +92,57 @@ export const setupSocket = (server) => {
         // confirm send message successfully
         socket.emit("messageSaved", populatedMessage)
 
-        io.to(conversationId).emit("conversationUpdated", {
-          conversationId: conversationId,
-          lastMessage: populatedMessage.text,
+        // get conversation and emit conversation updated for all participants
+        const conversation = await conversationModel.findById(conversationId).lean();
+
+        // notify receiver about new unread message
+        const receiverIdObj = conversation.participants.find(
+          (id) => id.toString() !== socket.userId.toString()
+        );
+
+        const receiverId = receiverIdObj ? receiverIdObj.toString() : null;
+
+        let unreadCount = 0;
+        if (receiverId) {
+          unreadCount = await Message.countDocuments({
+            conversation: conversationId,
+            readBy: { $nin: [new mongoose.Types.ObjectId(receiverId)] },
+          })
+        }
+
+        // emit conversationUpdated for sender
+        io.to(socket.userId.toString()).emit("conversationUpdated", {
+          conversationId: conversation._id,
+          lastMessage: populatedMessage.text || (attachments?.length ? "attached files" : ""),
           lastMessageAt: populatedMessage.createdAt,
-          lastMessageSender: populatedMessage.sender._id,
+          lastMessageSender: socket.userId,
+          unreadCount: 0,
+        });
+
+        if (receiverId) {
+          io.to(receiverId.toString()).emit("conversationUpdated", {
+            conversationId: conversation._id,
+            lastMessage: populatedMessage.text || (attachments?.length ? "attached files" : ""),
+            lastMessageAt: populatedMessage.createdAt,
+            lastMessageSender: socket.userId,
+            unreadCount,
+          })
+
+          // notify receiver to refresh unread badge for that conversation
+          io.to(receiverId.toString()).emit("unreadUpdated", { conversationId });
+        }
+
+        // io.to(receiverId.toString()).emit("newUnreadMessage", {
+        //   conversationId,
+        //   message: populatedMessage,
+        // });
+
+        console.log("Sent message:", {
+          conversationId,
+          from: socket.userId,
+          to: receiverId,
+          unreadCount,
+          messageId: populatedMessage._id.toString()
         });
       } catch (error) {
         console.error("Error sending message:", error);
@@ -110,6 +158,7 @@ export const setupSocket = (server) => {
         await message.updateMany(
           {
             conversation: conversationId,
+            sender: { $ne: socket.userId },
             readBy: { $ne: socket.userId },
           },
           { $push: { readBy: socket.userId } }
@@ -119,6 +168,9 @@ export const setupSocket = (server) => {
           conversationId,
           userId: socket.userId,
         });
+
+        // update unread count for the user
+        io.to(conversationId).emit("unreadUpdated", { conversationId });
 
         console.log(`User ${socket.userId} marked messages as read in ${conversationId}`);
       } catch (error) {

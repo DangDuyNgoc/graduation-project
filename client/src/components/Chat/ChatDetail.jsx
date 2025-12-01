@@ -24,12 +24,30 @@ function ChatDetail({ conversationId, onClose }) {
       }
     };
 
+    const handleMessageRead = ({ conversationId: convId, userId }) => {
+      if (convId !== conversationId) return;
+      setConversationInfo((prev) => {
+        if (!prev || !prev.messages) return prev;
+
+        return {
+          ...prev,
+          messages: prev.messages.map((msg) =>
+            msg.readBy.includes(userId)
+              ? msg
+              : { ...msg, readBy: [...msg.readBy, userId] }
+          ),
+        };
+      });
+    };
+
     socket.on("receiveMessage", handleReceiveMessage);
+    socket.on("messageRead", handleMessageRead);
 
     return () => {
       socket.off("receiveMessage", handleReceiveMessage);
+      socket.off("messageRead", handleMessageRead);
     };
-  }, [conversationId, socket]);
+  }, [conversationId]);
 
   const fetchConversation = async () => {
     setLoading(true);
@@ -55,7 +73,7 @@ function ChatDetail({ conversationId, onClose }) {
     if (conversationInfo && conversationId && user?._id) {
       socket.emit("markAsRead", { conversationId });
     }
-  }, [conversationInfo, conversationId, user._id]);
+  }, [conversationId]);
 
   if (!conversationId) {
     return null;

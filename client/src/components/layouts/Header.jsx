@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { UserContext } from "@/context/UserContext";
 import { Button } from "@/components/ui/button";
 import api from "@/utils/axiosInstance";
+import { disconnectSocket } from "@/utils/socket";
 
 const Header = () => {
   const { user, clearData } = useContext(UserContext);
@@ -12,6 +13,7 @@ const Header = () => {
 
   const handleLogout = async () => {
     clearData();
+    disconnectSocket();
     await api.get("/user/logout");
     navigate("/login");
   };
@@ -19,7 +21,7 @@ const Header = () => {
   return (
     <header className="w-full h-16 bg-white shadow-sm border-b flex items-center justify-between px-6 fixed top-0 left-0 z-50">
       <div className="text-lg font-semibold text-primary flex">
-        <GraduationCap className="mr-3"/> Online Learning
+        <GraduationCap className="mr-3" /> Online Learning
       </div>
 
       <div className="flex items-center gap-4">

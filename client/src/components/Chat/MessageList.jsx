@@ -33,29 +33,35 @@ const MessageList = ({
       })}
 
       {/* Animation typing */}
-      {typingUsers.length > 0 && (
-        <div className="flex items-center space-x-2 mt-1">
-          <div className="flex -space-x-1">
-            <div className="w-6 h-6 rounded-full overflow-hidden border border-white">
-              <Avatar className="w-full h-full">
-                <AvatarImage
-                  src={
-                    messages?.avatar?.url ||
-                    "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
-                  }
-                  alt={messages?.name || "avatar"}
-                />
-              </Avatar>
+      {typingUsers.length > 0 &&
+        (() => {
+          const typingUserId = typingUsers[0];
+
+          const lastMessageFromUser = [...messages]
+            .reverse()
+            .find((m) => m.sender?._id?.toString() === typingUserId.toString());
+
+          const avatarUrl =
+            lastMessageFromUser?.sender?.avatar?.url ||
+            "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png";
+          return (
+            <div className="flex items-center space-x-2 mt-1">
+              <div className="flex -space-x-1">
+                <div className="w-6 h-6 rounded-full overflow-hidden border border-white">
+                  <Avatar className="w-full h-full">
+                    <AvatarImage src={avatarUrl} alt={"avatar"} />
+                  </Avatar>
+                </div>
+                {/* typing dot */}
+                <div className="flex space-x-1 items-center ml-2">
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
+                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
+                </div>
+              </div>
             </div>
-            {/* typing dot */}
-            <div className="flex space-x-1 items-center ml-2">
-              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
-              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
-              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full typing-dot" />
-            </div>
-          </div>
-        </div>
-      )}
+          );
+        })()}
     </>
   );
 };

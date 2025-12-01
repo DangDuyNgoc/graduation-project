@@ -20,7 +20,8 @@ const conversationSchema = new mongoose.Schema({
         }
     ],
     lastMessage: {
-        type: String
+        type: String,
+        default: ""
     },
     lastMessageAt: {
         type: Date,
@@ -34,12 +35,6 @@ const conversationSchema = new mongoose.Schema({
         type: mongoose.Types.ObjectId,
         ref: "user"
     },
-    unreadMessages: [
-        {
-            user: { type: mongoose.Types.ObjectId, ref: "user" },
-            count: { type: Number, default: 0 },
-        },
-    ],
     deletedFor: [
         {
             type: mongoose.Types.ObjectId,
