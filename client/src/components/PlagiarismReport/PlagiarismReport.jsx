@@ -5,6 +5,7 @@ import api from "@/utils/axiosInstance";
 import toast from "react-hot-toast";
 import { LoaderCircle } from "lucide-react";
 import DashboardLayout from "@/layout/Dashboard";
+import BlockchainInfo from "../Blockchain/BlockchainInfo";
 
 function PlagiarismReport() {
   const { id } = useParams();
@@ -26,7 +27,10 @@ function PlagiarismReport() {
         }
       );
       if (data.success) {
-        setReport(data.report);
+        setReport({
+          ...data.report,
+          submission: data.submission
+        });
       } else {
         toast.error(data.message || "Failed to fetch report", {
           id: "enroll_error",
@@ -67,6 +71,8 @@ function PlagiarismReport() {
 
   return (
     <DashboardLayout>
+      <Button onClick={() => navigate(-1)}>Go Back</Button>
+      <BlockchainInfo submission={report.submission}/>
       <div className="bg-white shadow-md rounded-lg p-6 mt-6">
         <h2>Plagiarism Report</h2>
         <p className="text-gray-700 mb-4">
@@ -76,9 +82,7 @@ function PlagiarismReport() {
           </span>
         </p>
 
-        <Button onClick={() => navigate(-1)}>Go Back</Button>
-
-        <div className="border-t pt-4 space-y-6">
+        <div className="pt-4 space-y-6">
           {report.files.map((file, index) => {
             const highMatches = file.matchedSources.filter(
               (s) => s.similarity > threshold

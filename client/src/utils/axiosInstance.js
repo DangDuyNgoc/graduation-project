@@ -67,8 +67,6 @@ export const setUpInterceptors = ({ clearData }) => {
                         clearData();
                     }
 
-                    window.location.href = "/login";
-
                     return Promise.reject(error);
                 }
             }

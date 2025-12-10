@@ -127,7 +127,8 @@ export const getPlagiarismReportController = async (req, res) => {
     res.status(200).send({
       success: true,
       message: "Plagiarism report fetched successfully",
-      report
+      report,
+      submission
     });
   } catch (error) {
     console.error("[ERROR getPlagiarismReportController]", error);

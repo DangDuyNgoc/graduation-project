@@ -25,7 +25,6 @@ function TeacherCoursePage() {
       setCourses(data.course || []);
     } catch (error) {
       console.error("Failed to fetch courses:", error);
-      toast.error("Failed to load courses!");
     } finally {
       setLoading(false);
     }

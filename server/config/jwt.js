@@ -18,11 +18,13 @@ export const sendToken = (res, accessToken, refreshToken) => {
         sameSite: "lax",
         secure: true,
         maxAge: 4 * 60 * 60 * 1000 // 4 hours
+        // maxAge: 1 * 60 * 1000 // 4 hours
     })
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+        secure: true,
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        // maxAge: 3 * 60 * 1000 // 7 days
     })
 }

@@ -52,6 +52,6 @@ submissionRoute.delete("/delete-all-submissions/:id",
     deleteAllSubmissionsController
 );
 
-submissionRoute.post("/verify", isAuthenticated, verifySubmissionBlockchainController);
+submissionRoute.post("/verify/:id", isAuthenticated, verifySubmissionBlockchainController);
 
 export default submissionRoute;

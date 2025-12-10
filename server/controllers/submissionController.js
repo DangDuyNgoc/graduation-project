@@ -714,14 +714,42 @@ export const deleteAllSubmissionsController = async (req, res) => {
 // verify submission on blockchain
 export const verifySubmissionBlockchainController = async (req, res) => {
   try {
-    const { studentId, assignmentId, contentHash } = req.body;
+    const { id } = req.params;
 
-    if (!studentId || !assignmentId || !contentHash) {
+    if (!id) {
       return res.status(400).send({
         success: false,
-        message: "Please provide studentId, assignmentId and hash"
-      });
+        message: "Submission ID is required"
+      })
     }
+
+    // get submission
+    const submission = await submissionModel.findById(id).populate("student assignment");
+
+    if (!submission) {
+      return res.status(404).send({
+        success: false,
+        message: "Submission not found",
+      });
+    };
+
+    // detached information needs verify
+    const studentId = submission.student._id.toString();
+    const assignmentId = submission.assignment._id.toString();
+    const contentHash = submission.contentHash;
+
+    console.log("studentId:", studentId);
+    console.log("assignmentId:", assignmentId);
+    console.log("contentHash:", contentHash);
+
+    if (!contentHash) {
+      return res.status(400).send({
+        success: false,
+        message: "Submission has no content hash",
+      });
+    };
+
+    // call smart contract
     const isValid = await contract.verifySubmission(studentId, assignmentId, contentHash);
 
     return res.status(200).send({
@@ -736,4 +764,4 @@ export const verifySubmissionBlockchainController = async (req, res) => {
       message: "Internal server error"
     });
   }
-}
+} 

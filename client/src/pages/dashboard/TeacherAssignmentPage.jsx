@@ -33,6 +33,7 @@ export default function TeacherAssignmentPage() {
       const data = await getOneCourse(id);
       if (data.success) setCourse(data.result);
     } catch (error) {
+      console.log(error);
       setCourse(null);
     } finally {
       setLoading(false);

@@ -1,7 +1,10 @@
 import { getPlagiarismReportApiById } from "@/api/plagiarismReportApi";
-import { getOneSubmisionApiById } from "@/api/submissionApi";
+import { getOneSubmissionApiById } from "@/api/submissionApi";
 import LoadingSpinner from "@/components/Common/LoadingSpinner";
+import PlagiarismReport from "@/components/PlagiarismReport/PlagiarismReport";
+import { Button } from "@/components/ui/button";
 import DashboardLayout from "@/layout/Dashboard";
+import api from "@/utils/axiosInstance";
 import { ExternalLink, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
@@ -19,7 +22,7 @@ export default function TeacherSubmissionStudentPage() {
       setLoading(true);
       try {
         const [subRes, repRes] = await Promise.all([
-          getOneSubmisionApiById(id),
+          getOneSubmissionApiById(id),
           getPlagiarismReportApiById(id),
         ]);
 
@@ -54,6 +57,32 @@ export default function TeacherSubmissionStudentPage() {
     fetchData();
   }, [id]);
 
+  const handleVerifyBlockchain = async (submissionId) => {
+    console.log("submission ID, ", submissionId);
+    try {
+      toast.loading("Verifying on blockchain.....", { id: "verify" });
+      const { data } = await api.post(
+        `/submission/verify/${submissionId}`,
+        {},
+        { withCredentials: true }
+      );
+      toast.dismiss("verify");
+
+      if (data.success) {
+        if (data.isValid) {
+          toast.success("Submission is Valid!");
+        } else {
+          toast.error("Submission Tampered (Does not match blockchain)");
+        }
+      } else {
+        toast.error(data.message || "Verification failed");
+      }
+    } catch (error) {
+      console.log(error);
+      toast.dismiss("verify");
+    }
+  };
+
   return (
     <DashboardLayout>
       {loading ? (
@@ -64,7 +93,10 @@ export default function TeacherSubmissionStudentPage() {
         <div className="mx-auto mt-3 p-6 bg-white rounded-xl shadow-sm space-y-6">
           <div className="flex items-center gap-4">
             <img
-              src={submission.student?.avatar?.url}
+              src={
+                submission.student?.avatar?.url ||
+                "https://res.cloudinary.com/dsfdghxx4/image/upload/v1730813754/nrxsg8sd9iy10bbsoenn_bzlq2c.png"
+              }
               alt="avatar"
               className="w-14 h-14 rounded-full object-cover border"
             />
@@ -136,7 +168,7 @@ export default function TeacherSubmissionStudentPage() {
                 Late by {submission.lateDuration} minutes
               </p>
             )}
-            {submission.blockchainTxHash && (
+            {submission.blockchainTxHash ? (
               <p className="mt-1">
                 Blockchain Tx:{" "}
                 <a
@@ -148,12 +180,22 @@ export default function TeacherSubmissionStudentPage() {
                   {submission.blockchainTxHash}
                 </a>
               </p>
+            ) : (
+              <span className="text-gray-400 italic">No on-chain yet</span>
             )}
           </div>
 
           {report && (
             <div className="border-t pt-5">
-              <h3 className="text-lg font-semibold mb-2">Plagiarism Report</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold mb-2">
+                  Plagiarism Report
+                </h3>
+                <Button onClick={() => handleVerifyBlockchain(submission._id)}>
+                  {" "}
+                  Verify Blockchain Integrity
+                </Button>
+              </div>
               <p className="text-sm text-gray-700 mb-3">
                 Similarity Score:{" "}
                 <span

@@ -45,22 +45,48 @@ contract SubmissionStorage {
     }
 
     // verify by hash
+    // function verifySubmission(string memory studentId, string memory assignmentId, string memory contentHash) 
+    //     public 
+    //     view 
+    //     returns (bool) 
+    // {
+    //     Submission[] memory subs = submissions[studentId];
+
+    //     for (uint i = 0; i < subs.length; i++) {
+    //         if (
+    //             keccak256(abi.encodePacked(subs[i].assignmentId)) == keccak256(abi.encodePacked(assignmentId)) &&
+    //             keccak256(abi.encodePacked(subs[i].contentHash)) == keccak256(abi.encodePacked(contentHash))
+    //         ) {
+    //             return true;
+    //         }
+    //     }
+    //     return false;
+    // }
+    
     function verifySubmission(string memory studentId, string memory assignmentId, string memory contentHash) 
-        public 
-        view 
-        returns (bool) 
+    public 
+    view 
+    returns (bool, string memory, string memory, string memory) 
     {
         Submission[] memory subs = submissions[studentId];
+
+        if (subs.length == 0) {
+            return (false, "No submission found for studentId", studentId, "");
+        }
+
         for (uint i = 0; i < subs.length; i++) {
             if (
                 keccak256(abi.encodePacked(subs[i].assignmentId)) == keccak256(abi.encodePacked(assignmentId)) &&
                 keccak256(abi.encodePacked(subs[i].contentHash)) == keccak256(abi.encodePacked(contentHash))
             ) {
-                return true;
+                return (true, subs[i].assignmentId, subs[i].contentHash, "MATCH");
             }
         }
-        return false;
+
+        return (false, "Found submissions but mismatch", assignmentId, contentHash);
     }
+
+
 
     // get one submission by index
     function getSubmission(string memory studentId, uint index) 

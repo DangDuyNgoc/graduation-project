@@ -1,7 +1,7 @@
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
 import { formatLateDuration } from "@/utils/timeFormatter";
-import { FileText, LoaderCircle, Paperclip } from "lucide-react";
+import { LoaderCircle, Paperclip } from "lucide-react";
 import React, { useState, useEffect, useMemo } from "react";
 
 const SubmissionsPage = () => {
@@ -59,7 +59,7 @@ const SubmissionsPage = () => {
       return 0;
     });
   }, [submissions, sortBy]);
-  
+
 
   return (
     <DashboardLayout>
@@ -86,7 +86,7 @@ const SubmissionsPage = () => {
             <LoaderCircle className="size-8 animate-spin text-primary" />
           </div>
         ) : sortedSubmissions.length > 0 ? (
-          <div className="overflow-x-auto shadow-lg rounded-lg">
+          <div className="overflow-x-auto shadow-lg rounded-lg cursor-pointer">
             <table className="min-w-full bg-white border border-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -115,7 +115,13 @@ const SubmissionsPage = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {sortedSubmissions.map((submission) => (
-                  <tr key={submission._id} className="hover:bg-gray-50">
+                  <tr
+                    key={submission._id}
+                    className="hover:bg-gray-50"
+                    onClick={() => {
+                      window.location.href = `/plagiarism-report/${submission._id}`;
+                    }}
+                  >
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {submission.assignment.title || "-"}
                     </td>
@@ -154,7 +160,6 @@ const SubmissionsPage = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                       {submission.plagiarismScore != null
                         ? `${submission.plagiarismScore * 100}%`
-
                         : "—"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">

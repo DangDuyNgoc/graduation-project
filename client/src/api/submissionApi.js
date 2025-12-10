@@ -7,7 +7,7 @@ export const getSubmisionApibyAssignmentId = async (id) => {
   return data;
 };
 
-export const getOneSubmisionApiById = async (id) => {
+export const getOneSubmissionApiById = async (id) => {
   const { data } = await api.get(`/submission/get-submission/${id}`, {
     withCredentials: true,
   });
