@@ -174,7 +174,7 @@ export default function TeacherAssignmentPage() {
               <div ref={menuRef} className="relative">
                 <button
                   onClick={() => setOpenMenu((prev) => !prev)}
-                  className="p-2 rounded-full hover:bg-gray-100 transition"
+                  className="p-2 rounded-full hover:bg-gray-100 transition cursor-pointer"
                 >
                   <Settings className="size-6 text-gray-700" />
                 </button>

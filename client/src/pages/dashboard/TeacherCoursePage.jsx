@@ -1,6 +1,7 @@
 import { deleteAllCourse, getTeacherCourses } from "@/api/courseApi";
 import DeleteDialog from "@/components/Common/DeleteDialog";
 import LoadingSpinner from "@/components/Common/LoadingSpinner";
+import SearchBar from "@/components/Common/SearchBar";
 import CourseDialog from "@/components/Courses/CourseDialog";
 import DashboardLayout from "@/layout/Dashboard";
 import { Settings, Users } from "lucide-react";
@@ -15,6 +16,8 @@ function TeacherCoursePage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [filteredCourses, setFilteredCourses] = useState([]);
+  const [search, setSearch] = useState("");
 
   const navigate = useNavigate();
 
@@ -47,6 +50,16 @@ function TeacherCoursePage() {
   useEffect(() => {
     fetchCourses();
   }, [fetchCourses]);
+
+  useEffect(() => {
+    const lower = search.toLowerCase();
+    const filtered = courses.filter(
+      (c) =>
+        c.name?.toLowerCase().includes(lower) ||
+        c.teacherId?.name.toLowerCase().includes(lower)
+    );
+    setFilteredCourses(filtered);
+  }, [search, courses]);
 
   return (
     <DashboardLayout>
@@ -100,13 +113,19 @@ function TeacherCoursePage() {
         </div>
       </div>
 
+      <SearchBar
+        placeholder="Search courses by name or instructor..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       {loading ? (
         <LoadingSpinner text="Loading..." className="py-20" />
-      ) : courses.length === 0 ? (
+      ) : filteredCourses.length === 0 ? (
         <p className="text-center text-gray-500 mt-10">No courses available.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {courses.map((course) => {
+          {filteredCourses.map((course) => {
             const totalStudents = course.studentIds?.length || 0;
             return (
               <div
@@ -125,7 +144,7 @@ function TeacherCoursePage() {
                   </h2>
                   <p className="text-sm text-gray-500 flex items-center">
                     <Users size={16} className="mr-1" /> {totalStudents}{" "}
-                    Students
+                    students errolled
                   </p>
                 </div>
               </div>

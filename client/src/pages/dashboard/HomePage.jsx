@@ -74,7 +74,8 @@ function HomePage() {
             filteredCourses.map((course) => (
               <div
                 key={course._id}
-                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-all"
+                onClick={() => handleViewDetailCourse(course._id)}
+                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-all cursor-pointer"
               >
                 <img
                   src={course.thumbnail?.url || "https://placehold.co/600x400"}
@@ -85,23 +86,15 @@ function HomePage() {
                   <h2 className="text-lg font-semibold text-gray-800">
                     {course.name}
                   </h2>
-                  <p className="text-sm text-gray-500 mb-2">
+                  <p className="text-xs text-gray-500 mb-1">
                     Instructor: {course.teacherId?.name || "Unknown"}
                   </p>
-                  <div className="flex items-center mb-4">
+                  <div className="flex items-center">
                     <p className="text-sm text-gray-600 flex item-center">
                       <Users size={16} className="mr-1" />{" "}
                       {course.studentIds?.length || 0} students enrolled
                     </p>
-                    <span className="mx-3 w-1 h-1 bg-gray-400 rounded-full"></span>
-
-                    <p className="text-sm text-gray-600 line-clamp-2">
-                      {course.description}
-                    </p>
                   </div>
-                  <Button onClick={() => handleViewDetailCourse(course._id)}>
-                    View Details
-                  </Button>
                 </div>
               </div>
             ))

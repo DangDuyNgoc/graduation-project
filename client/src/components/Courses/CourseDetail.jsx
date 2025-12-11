@@ -83,7 +83,7 @@ const CourseDetail = () => {
               </h1>
               <div className="flex flex-wrap items-center justify-between text-sm text-gray-600 mb-6">
                 <span>Instructor: {course.teacherId?.name}</span>
-                <span>Duration: {course.duration}</span>
+                {/* <span>Duration: {course.duration}</span> */}
                 <span>Enrolled: {course.studentIds?.length}</span>
               </div>
             </div>

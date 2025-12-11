@@ -180,12 +180,12 @@ export default function TeacherEnrolStudent() {
               <div className="flex justify-between mt-3">
                 <button
                   onClick={() => navigate(`/teacher-enrolled-student/${id}`)}
-                  className="px-5 py-2 bg-black text-white hover:opacity-65 transition text-sm rounded-lg shadow-sm"
+                  className="px-5 py-2 bg-black text-white hover:opacity-65 transition text-sm rounded-lg shadow-sm cursor-pointer"
                 >
                   Back
                 </button>
                 <button
-                  className="px-5 py-2 bg-blue-600 text-white hover:bg-blue-700 transition text-sm rounded-lg shadow-sm disabled:opacity-50"
+                  className="px-5 py-2 bg-blue-600 text-white hover:bg-blue-700 transition text-sm rounded-lg shadow-sm disabled:opacity-50 cursor-pointer"
                   onClick={handleBulkAdd}
                   disabled={loading}
                 >

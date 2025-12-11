@@ -177,7 +177,7 @@ def check_plagiarism_material(
     material_id,
     num_results=3,
     exact_threshold=0.90,
-    semantic_threshold=0.85,
+    semantic_threshold=0.80,
     ngram_threshold=0.3,
     top_k=5,
     semantic_weight=0.7,
