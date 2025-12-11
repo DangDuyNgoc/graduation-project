@@ -4,7 +4,7 @@ import { useContext, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 export const useAuth = () => {
-  const { user, updateUser, clearUser } = useContext(UserContext);
+  const { user, updateUser, clearData } = useContext(UserContext);
 
   const navigate = useNavigate();
 
@@ -22,7 +22,7 @@ export const useAuth = () => {
       } catch (error) {
         console.log(error);
         if (isMounted) {
-          clearUser();
+          clearData();
           navigate("/login");
         }
       }
@@ -33,5 +33,5 @@ export const useAuth = () => {
     return () => {
       isMounted = false;
     };
-  }, [updateUser, clearUser, navigate, user]);
+  }, [updateUser, clearData, navigate, user]);
 };

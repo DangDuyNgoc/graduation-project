@@ -5,6 +5,7 @@ import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
 import { LoaderCircle, Users } from "lucide-react";
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 
 function HomePage() {
@@ -13,9 +14,9 @@ function HomePage() {
   const [filteredCourses, setFilteredCourses] = useState([]);
   const [search, setSearch] = useState("");
 
-  useAuth();
-
   const navigate = useNavigate();
+
+  useAuth();
 
   const fetchCourse = async () => {
     setLoading(true);
@@ -45,10 +46,6 @@ function HomePage() {
     );
     setFilteredCourses(filtered);
   }, [search, courses]);
-
-  const handleViewDetailCourse = (id) => {
-    navigate(`/course/${id}`);
-  };
 
   return (
     <DashboardLayout>
@@ -99,7 +96,17 @@ function HomePage() {
                       {course.description}
                     </p>
                   </div>
-                  <Button onClick={() => handleViewDetailCourse(course._id)}>
+                  <Button
+                    onClick={() => {
+                      if (!course.isEnrolled) {
+                        toast.error(
+                          "You have not enrolled in this course yet."
+                        );
+                        return;
+                      }
+                      navigate(`/course/${course._id}`);
+                    }}
+                  >
                     View Details
                   </Button>
                 </div>

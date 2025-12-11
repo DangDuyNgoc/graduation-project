@@ -13,7 +13,7 @@ import { useAuth } from "@/hook/useAuth";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
 
-import React, { useContext, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 const ProfilePage = () => {
@@ -65,6 +65,12 @@ const ProfilePage = () => {
     }
   };
 
+  useEffect(() => {
+    if (image) {
+      handleUploadAvatar();
+    }
+  }, [image]);
+
   const handleUpdateUser = async (e) => {
     e.preventDefault();
     try {
@@ -107,16 +113,14 @@ const ProfilePage = () => {
             </div>
           )}
 
-          {user?.avatar?.url && !image && (
-            <div className="flex justify-center mb-4">
-              <AvatarPhoto
-                image={image}
-                setImage={setImage}
-                onUpload={handleUploadAvatar}
-                currentAvatar={user?.avatar?.url}
-              />
-            </div>
-          )}
+          <div className="flex justify-center mb-4">
+            <AvatarPhoto
+              image={image}
+              setImage={setImage}
+              currentAvatar={user?.avatar?.url}
+              loading={loading}
+            />
+          </div>
           <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
             {user.name || "Unnamed User"}
           </h1>

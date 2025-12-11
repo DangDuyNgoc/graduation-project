@@ -102,7 +102,7 @@ export default function ChatBotPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col h-[calc(100vh-129.5px)] w-full border rounded shadow">
-        <div className="flex items-center p-3 bg-purple-500 text-white rounded-t">
+        <div className="flex items-center p-3 bg-primary text-white rounded-t">
           <h2 className="font-semibold flex-1">ChatBot AI</h2>
         </div>
 

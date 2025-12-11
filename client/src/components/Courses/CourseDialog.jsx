@@ -6,7 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Image as ImageIcon, LoaderCircle, Plus, Pencil } from "lucide-react";
+import { Image as ImageIcon, LoaderCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import FileUploadZone from "../Common/FileUploadZone";

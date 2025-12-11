@@ -2,7 +2,6 @@ import ChatView from "@/components/Chat/ChatView";
 import SearchBar from "@/components/Common/SearchBar";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { UserContext } from "@/context/UserContext";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";

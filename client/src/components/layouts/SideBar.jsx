@@ -74,13 +74,13 @@ const Sidebar = () => {
       path: "/chatbot-ai",
       icon: <Bot className="size-4" />,
     },
-    { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
     {
       name: "Conversations",
       path: "/conversations",
       icon: <MessageCircleMore className="size-4" />,
       showCount: true,
     },
+    { name: "Profile", path: "/profile", icon: <User className="size-4" /> },
   ];
 
   const studentMenu = [

@@ -6,20 +6,33 @@ import { UserContext } from "./context/UserContext";
 
 function App() {
   const [authChecked, setAuthChecked] = useState(false);
-  const { user, updateUser, clearData } = useContext(UserContext);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { updateUser } = useContext(UserContext);
 
   useEffect(() => {
     const verifyAuth = async () => {
       try {
         const res = await api.get("/user/me", { withCredentials: true });
         if (res.data.success) {
+          setIsAuthenticated(true);
           updateUser(res.data.user);
-        } else {
-          clearData();
         }
       } catch (error) {
         console.log(error);
-        clearData();
+        try {
+          const refreshRes = await api.get("/user/refresh-token");
+          if (refreshRes.data.success) {
+            const retryRes = await api.get("/user/me");
+            if (retryRes.data.success) {
+              setIsAuthenticated(true);
+              updateUser(retryRes.data.user);
+            }
+          } else {
+            setIsAuthenticated(false);
+          }
+        } catch {
+          setIsAuthenticated(false);
+        }
       } finally {
         setAuthChecked(true);
       }
@@ -28,7 +41,7 @@ function App() {
   }, []);
 
   if (!authChecked) return null;
-  if (!user) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" />;
   }
 

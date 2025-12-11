@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <h2>Hi <%= name %>,</h2>
+
+    <p>Your assignment submission has been received successfully.</p>
+
+    <p>
+      <strong>Assignment:</strong> <%= assignmentTitle %> <br />
+      <strong>Course:</strong> <%= courseName %> <br />
+    </p>
+
+    <% if (isLate) { %>
+    <p style="color: red">
+      Your submission was late by <%= lateMinutes %> minutes.
+    </p>
+    <% } else { %>
+    <p style="color: green">Submitted on time.</p>
+    <% } %>
+
+    <p>You can now view your submission status on the system.</p>
+
+    <br />
+    <p>Best regards</p>
+  </body>
+</html>

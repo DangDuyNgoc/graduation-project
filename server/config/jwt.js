@@ -16,14 +16,14 @@ export const sendToken = (res, accessToken, refreshToken) => {
     res.cookie("accessToken", accessToken, {
         httpOnly: true,
         sameSite: "lax",
-        secure: true,
-        maxAge: 4 * 60 * 60 * 1000 // 4 hours
-        // maxAge: 1 * 60 * 1000 // 4 hours
+        secure: false,
+        // maxAge: 4 * 60 * 60 * 1000 // 4 hours
+        maxAge: 1 * 60 * 1000 // 4 hours
     })
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         sameSite: "lax",
-        secure: true,
+        secure: false,
         maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         // maxAge: 3 * 60 * 1000 // 7 days
     })

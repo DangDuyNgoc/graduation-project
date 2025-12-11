@@ -26,25 +26,25 @@ courseRoute.post(
     isTeacher,
     createCourseController
 );
-courseRoute.get("/get-all-courses", getAllCourseController);
+courseRoute.get("/get-all-courses", isAuthenticated, getAllCourseController);
 courseRoute.get("/get-course/:id", isAuthenticated, getCourseByIdController);
 courseRoute.get(
-  "/get-teacher-courses",
-  isAuthenticated,
-  isTeacher,
-  getCoursesByTeacherId
+    "/get-teacher-courses",
+    isAuthenticated,
+    isTeacher,
+    getCoursesByTeacherId
 );
 courseRoute.get(
-  "/get-students-teacher-courses/:id",
-  isAuthenticated,
-  isTeacher,
-  getAllInfoStudentByCourseIdController
+    "/get-students-teacher-courses/:id",
+    isAuthenticated,
+    isTeacher,
+    getAllInfoStudentByCourseIdController
 );
 courseRoute.get(
-  "/get-all-students/teacher-course",
-  isAuthenticated,
-  isTeacher,
-  getAllInfoStudentController
+    "/get-all-students/teacher-course",
+    isAuthenticated,
+    isTeacher,
+    getAllInfoStudentController
 );
 courseRoute.put(
     "/update-course/:id",

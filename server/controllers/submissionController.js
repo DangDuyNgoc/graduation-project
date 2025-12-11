@@ -9,6 +9,7 @@ import { putObject } from "../utils/putObject.js";
 import contract from "../utils/blockchain.js";
 import courseModel from "../models/courseModel.js";
 import PlagiarismReportModel from "../models/PlagiarismReport.js";
+import { sendEmail } from "../utils/sendEmail.js";
 
 export const uploadSubmissionController = async (req, res) => {
   try {
@@ -179,6 +180,24 @@ export const uploadSubmissionController = async (req, res) => {
         "Error calling Flask API:",
         error.response?.data || error.message
       );
+    }
+
+    // send email notification
+    try {
+      await sendEmail({
+        email: req.user.email,
+        subject: "Submission Uploaded Successfully",
+        template: "submission_success.ejs",
+        data: {
+          name: req.user.name,
+          assignments: assignment.title,
+          courseName: course.name,
+          isLate: isLate,
+          lateMinutes: Math.floor(lateDuration / 60000)
+        }
+      });
+    } catch (error) {
+      console.error("Error rendering email template:", error);
     }
 
     res.status(200).send({
