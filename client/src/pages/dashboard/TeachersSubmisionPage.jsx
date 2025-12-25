@@ -45,7 +45,7 @@ export default function TeachersSubmissionPage() {
         ) : submissions.length === 0 ? (
           <p className="text-gray-500">No submissions yet.</p>
         ) : (
-          <div className="overflow-x-auto rounded-xl shadow-md">
+          <div className="overflow-x-auto rounded-xs shadow-md">
             <table className="min-w-full border-collapse bg-white text-sm">
               <thead>
                 <tr className="bg-gray-100 text-left">
@@ -54,8 +54,8 @@ export default function TeachersSubmissionPage() {
                   <th className="p-3 border-b">Email</th>
                   <th className="p-3 border-b">Assignment</th>
                   <th className="p-3 border-b">Status</th>
-                  <th className="p-3 border-b">Late Submission</th>
-                  <th className="p-3 border-b">Submitted At</th>
+                  <th className="p-3 border-b">Late</th>
+                  <th className="p-3 border-b">Submitted at</th>
                   <th className="p-3 border-b text-center">Action</th>
                 </tr>
               </thead>

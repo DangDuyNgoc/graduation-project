@@ -57,7 +57,7 @@ export default function TeacherEnrolledStudent() {
   return (
     <DashboardLayout>
       <div className="p-4">
-        <Button onClick={() => navigate(-1)}>Go Back</Button>
+        <Button onClick={() => navigate(`/teacher-assignment/${id}`)}>Go Back</Button>
         <div className="flex justify-between items-center mt-4">
           <h2 className="text-lg font-semibold">Enrolled Students</h2>
           <Button onClick={() => navigate(`/teacher-enroll-student/${id}`)}>

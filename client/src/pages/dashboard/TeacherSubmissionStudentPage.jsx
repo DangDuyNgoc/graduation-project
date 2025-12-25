@@ -120,8 +120,9 @@ export default function TeacherSubmissionStudentPage() {
             <p className="text-sm text-gray-500">
               Due:{" "}
               {new Date(submission.assignment?.dueDate).toLocaleString([], {
+                timeZone: "UTC",
                 dateStyle: "medium",
-                timeStyle: "short",
+                timeStyle: "medium",
               })}
               {submission.assignment?.allowLateSubmission && (
                 <span className="text-yellow-600 ml-2">(Late allowed)</span>
@@ -156,11 +157,12 @@ export default function TeacherSubmissionStudentPage() {
             <p>
               Status: <span className="font-medium">{submission.status}</span>
             </p>
-            <p>
+            <p className="mt-1">
               Submitted at:{" "}
               {new Date(submission.submittedAt).toLocaleString([], {
+                timeZone: "UTC",
                 dateStyle: "medium",
-                timeStyle: "short",
+                timeStyle: "medium",
               })}
             </p>
             {submission.isLate && (
@@ -196,18 +198,27 @@ export default function TeacherSubmissionStudentPage() {
                   Verify Blockchain Integrity
                 </Button>
               </div>
-              <p className="text-sm text-gray-700 mb-3">
+              <p className="text-sm text-gray-700 mb-2">
                 Similarity Score:{" "}
                 <span
                   className={`font-semibold ${
-                    report.similarityScore > 0.6
-                      ? "text-red-600"
-                      : report.similarityScore > 0.3
+                    report.similarityScore >= 0.8
+                      ? "text-red-700"
+                      : report.similarityScore >= 0.65
+                      ? "text-orange-600"
+                      : report.similarityScore >= 0.5
                       ? "text-yellow-600"
                       : "text-green-600"
                   }`}
                 >
-                  {(report.similarityScore * 100).toFixed(2)}%
+                  {(report.similarityScore * 100).toFixed(2)}% -{" "}
+                  {report.similarityScore >= 0.85
+                    ? "High similarity (possible serious copying)"
+                    : report.similarityScore >= 0.7
+                    ? "Medium similarity (noticeable copying)"
+                    : report.similarityScore >= 0.5
+                    ? "Low similarity (minor overlap)"
+                    : "Safe (minimal similarity)"}
                 </span>
               </p>
 
@@ -242,11 +253,31 @@ export default function TeacherSubmissionStudentPage() {
                         >
                           <p className="text-gray-700">
                             <span className="font-medium">Matched:</span>{" "}
-                            {match.matchedText.slice(0, 200)}...
+                            {match.matchedText}
                           </p>
-                          <p className="text-xs text-gray-500">
-                            Similarity: {(match.similarity * 100).toFixed(1)}% |
-                            Source:{" "}
+                          <p className="text-xs font-medium text-gray-500">
+                            Similarity:{" "}
+                            <span
+                              className={`font-semibold ${
+                                match.similarity * 100 >= 90
+                                  ? "text-red-700"
+                                  : match.similarity * 100 >= 80
+                                  ? "text-orange-600"
+                                  : match.similarity * 100 >= 50
+                                  ? "text-yellow-600"
+                                  : "text-green-600"
+                              }`}
+                            >
+                              {(match.similarity * 100).toFixed(1)}% -{" "}
+                              {match.similarity * 100 >= 90
+                                ? "High similarity"
+                                : match.similarity * 100 >= 80
+                                ? "Medium similarity"
+                                : match.similarity * 100 >= 50
+                                ? "Low similarity"
+                                : "Safe"}
+                            </span>{" "}
+                            | Source:{" "}
                             <span className="italic">{match.sourceType}</span>
                           </p>
                         </li>

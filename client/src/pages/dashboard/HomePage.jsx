@@ -1,5 +1,4 @@
 import SearchBar from "@/components/Common/SearchBar";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hook/useAuth";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
@@ -71,7 +70,14 @@ function HomePage() {
             filteredCourses.map((course) => (
               <div
                 key={course._id}
-                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-all duration-300 flex-col"
+                onClick={() => {
+                  if (!course.isEnrolled) {
+                    toast.error("You have not enrolled in this course yet.");
+                    return;
+                  }
+                  navigate(`/course/${course._id}`);
+                }}
+                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-all duration-300 flex-col cursor-pointer"
               >
                 {/* thumbnail */}
                 <img
@@ -93,32 +99,12 @@ function HomePage() {
                   </p>
 
                   {/* student enrolled */}
-                  <div className="flex items-center mb-3 gap-2">
+                  <div className="flex items-center mb-1 gap-2">
                     <Users size={16} className="text-gray-500" />
                     <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full">
                       {course.studentIds?.length || 0} students enrolled
                     </span>
                   </div>
-
-                  {/* description */}
-                  <p className="text-sm text-gray-600 line-clamp-2 mb-4">
-                    {course.description || "No description available."}
-                  </p>
-
-                  <Button
-                    className="mt-auto w-fit"
-                    onClick={() => {
-                      if (!course.isEnrolled) {
-                        toast.error(
-                          "You have not enrolled in this course yet."
-                        );
-                        return;
-                      }
-                      navigate(`/course/${course._id}`);
-                    }}
-                  >
-                    View Details
-                  </Button>
                 </div>
               </div>
             ))

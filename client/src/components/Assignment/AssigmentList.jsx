@@ -158,7 +158,7 @@ export default function AssignmentList({ courseId, studentInCourse }) {
           <button
             ref={buttonRef}
             onClick={() => setOpenMenu((p) => !p)}
-            className="p-2 rounded-full hover:bg-gray-100"
+            className="p-2 rounded-full hover:bg-gray-100 cursor-pointer"
           >
             <Settings className="size-6 text-gray-700" />
           </button>
@@ -225,7 +225,7 @@ export default function AssignmentList({ courseId, studentInCourse }) {
                         setSelectedAssignment(item);
                         setOpenDialog(true);
                       }}
-                      className="p-1 hover:bg-gray-100 rounded-md"
+                      className="p-1 hover:bg-gray-100 rounded-md cursor-pointer"
                     >
                       <Pencil className="size-4 text-gray-600" />
                     </button>
@@ -236,16 +236,16 @@ export default function AssignmentList({ courseId, studentInCourse }) {
                         setDeleteType("assignment");
                         setOpenDelete(true);
                       }}
-                      className="p-1 hover:bg-red-100 rounded-md"
+                      className="p-1 hover:bg-red-100 rounded-md cursor-pointer"
                     >
                       <Trash2 className="size-4 text-red-500" />
                     </button>
 
                     <span onClick={() => toggleExpand(item._id)}>
                       {isOpen ? (
-                        <ChevronUp className="size-4 text-gray-600" />
+                        <ChevronUp className="size-4 text-gray-600 cursor-pointer" />
                       ) : (
-                        <ChevronDown className="size-4 text-gray-600" />
+                        <ChevronDown className="size-4 text-gray-600 cursor-pointer" />
                       )}
                     </span>
                   </div>
@@ -255,7 +255,10 @@ export default function AssignmentList({ courseId, studentInCourse }) {
                   <div className="pb-4 ps-3 space-y-3">
                     {item.description && (
                       <p className="text-gray-700 text-sm">
-                        {item.description}
+                        {item.description.split(" ").slice(0, 10).join(" ") +
+                          (item.description.split(" ").length > 10
+                            ? "..."
+                            : "")}
                       </p>
                     )}
 
@@ -270,7 +273,7 @@ export default function AssignmentList({ courseId, studentInCourse }) {
                               setDeleteType("allMaterials");
                               setOpenDelete(true);
                             }}
-                            className="text-xs text-red-500 hover:underline"
+                            className="text-xs text-red-500 hover:underline cursor-pointer"
                           >
                             Delete all
                           </button>
@@ -282,8 +285,15 @@ export default function AssignmentList({ courseId, studentInCourse }) {
                             className="flex justify-between items-center"
                           >
                             <a
-                              href={file.s3_url}
+                              href={
+                                file.fileType === "application/pdf"
+                                  ? file.s3_url
+                                  : `https://docs.google.com/gview?url=${encodeURIComponent(
+                                      file.s3_url
+                                    )}&embedded=true`
+                              }
                               target="_blank"
+                              rel="noopener noreferrer"
                               className="flex items-center gap-2 text-blue-600 hover:underline text-sm"
                             >
                               <FileText className="size-4" />
@@ -299,12 +309,27 @@ export default function AssignmentList({ courseId, studentInCourse }) {
                                 setDeleteType("oneMaterial");
                                 setOpenDelete(true);
                               }}
-                              className="text-xs text-red-500 hover:underline"
+                              className="text-xs text-red-500 hover:underline cursor-pointer"
                             >
                               Delete
                             </button>
                           </div>
                         ))}
+
+                        <div className="text-sm">
+                          Duration:{" "}
+                          {new Date(item.dueDate).toLocaleString([], {
+                            timeZone: "UTC",
+                            dateStyle: "medium",
+                            timeStyle: "medium",
+                          })}
+                        </div>
+                        <div className="text-sm italic">
+                          Allow late submission:{" "}
+                          <span className="text-yellow-600">
+                            {item.allowLateSubmission ? "True" : "False"}
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>

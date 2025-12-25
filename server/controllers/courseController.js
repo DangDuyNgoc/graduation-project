@@ -188,7 +188,7 @@ export const getCoursesByTeacherId = async (req, res) => {
       });
     }
 
-    const courses = await courseModel.find({ teacherId }).populate("teacherId");
+    const courses = await courseModel.find({ teacherId }).populate("teacherId").sort({createdAt: -1});
     if (!courses || courses.length === 0) {
       return res.status(404).send({
         success: false,
