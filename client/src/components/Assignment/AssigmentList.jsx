@@ -255,10 +255,7 @@ export default function AssignmentList({ courseId, studentInCourse }) {
                   <div className="pb-4 ps-3 space-y-3">
                     {item.description && (
                       <p className="text-gray-700 text-sm">
-                        {item.description.split(" ").slice(0, 10).join(" ") +
-                          (item.description.split(" ").length > 10
-                            ? "..."
-                            : "")}
+                        {item.description}
                       </p>
                     )}
 
@@ -315,23 +312,24 @@ export default function AssignmentList({ courseId, studentInCourse }) {
                             </button>
                           </div>
                         ))}
-
-                        <div className="text-sm">
-                          Duration:{" "}
-                          {new Date(item.dueDate).toLocaleString([], {
-                            timeZone: "UTC",
-                            dateStyle: "medium",
-                            timeStyle: "medium",
-                          })}
-                        </div>
-                        <div className="text-sm italic">
-                          Allow late submission:{" "}
-                          <span className="text-yellow-600">
-                            {item.allowLateSubmission ? "True" : "False"}
-                          </span>
-                        </div>
                       </div>
                     )}
+
+                    <div className="text-sm">
+                      Duration:{" "}
+                      {new Date(item.dueDate).toLocaleString([], {
+                        timeZone: "UTC",
+                        dateStyle: "medium",
+                        timeStyle: "medium",
+                      })}
+                    </div>
+                    <div className="text-sm italic">
+                      Allow late submission:{" "}
+                      <span className="text-yellow-600">
+                        {item.allowLateSubmission ? "True" : "False"} (
+                        {item.lateSubmissionDuration}m)
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
