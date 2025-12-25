@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import api from "@/utils/axiosInstance";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import FileUploadZone from "../Common/FileUploadZone";
@@ -23,6 +22,7 @@ export default function AssignmentDialog({
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [allowLateSubmission, setAllowLateSubmission] = useState(false);
+  const [lateSubmissionDuration, setLateSubmissionDuration] = useState("");
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -32,12 +32,16 @@ export default function AssignmentDialog({
       setDescription(initialData.description || "");
       setDueDate(initialData.dueDate ? initialData.dueDate.slice(0, 16) : "");
       setAllowLateSubmission(!!initialData.allowLateSubmission);
+      setLateSubmissionDuration(
+        initialData.lateSubmissionDuration?.toString() || ""
+      );
       setMaterials(initialData.materials || []);
     } else {
       setTitle("");
       setDescription("");
       setDueDate("");
       setAllowLateSubmission(false);
+      setLateSubmissionDuration("");
       setMaterials([]);
     }
   }, [initialData, open]);
@@ -46,6 +50,11 @@ export default function AssignmentDialog({
     e.preventDefault();
     if (!title || !dueDate) {
       toast.error("Please provide both title and due date");
+      return;
+    }
+
+    if (allowLateSubmission && !lateSubmissionDuration) {
+      toast.error("Please enter late submission duration");
       return;
     }
 
@@ -62,9 +71,15 @@ export default function AssignmentDialog({
         "allowLateSubmission",
         allowLateSubmission ? "true" : "false"
       );
+      
+      if (allowLateSubmission && lateSubmissionDuration) {
+        formData.append("lateSubmissionDuration", lateSubmissionDuration);
+      }
 
       const newFiles = materials.filter((f) => !f.url);
-      newFiles.forEach((file) => formData.append("materials", file));
+      newFiles.forEach((file) => {
+        formData.append("materials", file);
+      });
 
       let res;
       if (initialData?._id) {
@@ -139,20 +154,42 @@ export default function AssignmentDialog({
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="allowLate"
-              checked={allowLateSubmission}
-              onChange={(e) => setAllowLateSubmission(e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <label
-              htmlFor="allowLate"
-              className="cursor-pointer text-sm text-gray-700"
-            >
-              Allow late submission
-            </label>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="allowLate"
+                checked={allowLateSubmission}
+                onChange={(e) => {
+                  setAllowLateSubmission(e.target.checked);
+                  if (!e.target.checked) {
+                    setLateSubmissionDuration("");
+                  }
+                }}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label
+                htmlFor="allowLate"
+                className="cursor-pointer text-sm text-gray-700"
+              >
+                Allow late submission
+              </label>
+            </div>
+
+            {allowLateSubmission && (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={1}
+                  value={lateSubmissionDuration}
+                  onChange={(e) => setLateSubmissionDuration(e.target.value)}
+                  placeholder="Minutes"
+                  className="w-20 h-5 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+                <span className="text-sm text-gray-600">minutes</span>
+              </div>
+            )}
           </div>
 
           <FileUploadZone
