@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { UserContext } from "@/context/UserContext";
 import DashboardLayout from "@/layout/Dashboard";
 import api from "@/utils/axiosInstance";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, Mail, MessageCircle, Phone } from "lucide-react";
 import React, { useState, useEffect, useContext } from "react";
 
 function TeachersPage() {
@@ -66,7 +66,7 @@ function TeachersPage() {
         setConversationId(null);
         return;
       }
-      
+
       setSelectedTeacher(teacher);
       setConversationId(data.conversation._id);
     } catch (error) {
@@ -95,8 +95,13 @@ function TeachersPage() {
               filteredTeachers.map((teacher) => (
                 <div
                   key={teacher._id}
-                  className="bg-white rounded-lg shadow-md overflow-hidden"
+                  className="
+                    bg-white rounded-2xl border shadow-sm
+                    hover:shadow-lg transition-all duration-300
+                    flex flex-col
+                  "
                 >
+                  {/* Header */}
                   <div className="flex items-center justify-between m-4">
                     <div>
                       <h2 className="text-2xl font-semibold text-gray-800">
@@ -104,7 +109,7 @@ function TeachersPage() {
                       </h2>
                     </div>
                     <div className="cursor-pointer rounded-full border-2 border-dashed border-gray-300 transition">
-                      <Avatar className="w-20 h-20">
+                      <Avatar className="w-20 h-20 border">
                         <AvatarImage
                           src={
                             teacher?.avatar?.url ||
@@ -117,18 +122,35 @@ function TeachersPage() {
                   </div>
 
                   {/* Teacher Details */}
-                  <div className="p-4 bg-gray-100">
-                    <p className="text-gray-500 mt-1">Email: {teacher.email}</p>
-                    <p className="text-gray-500 mt-2">
-                      Phone: {teacher.phone || "No phone number"}
-                    </p>
+
+                  <div className="px-5 pb-4 space-y-2 text-sm text-gray-600">
+                    <div className="flex items-center gap-2">
+                      <Mail size={16} className="text-gray-400" />
+                      <span className="truncate">{teacher.email}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Phone size={16} className="text-gray-400" />
+                      <span>{teacher.phone || "No phone number"}</span>
+                    </div>
                   </div>
-                  <Button
-                    className="w-full"
-                    onClick={() => handleContact(teacher)}
-                  >
-                    Contact
-                  </Button>
+
+                  <div className="px-5 pb-5 mt-auto">
+                    <Button
+                      onClick={() => handleContact(teacher)}
+                      className="
+                          w-full rounded-xl
+                          bg-gradient-to-r from-purple-500 to-indigo-500
+                          hover:from-purple-600 hover:to-indigo-600
+                          text-white
+                          flex items-center justify-center gap-2
+                          transition-all duration-300
+                        "
+                    >
+                      <MessageCircle size={18} />
+                      Chat with Teacher
+                    </Button>
+                  </div>
                 </div>
               ))
             ) : (

@@ -1,48 +1,33 @@
-import { useContext, useEffect, useState } from "react";
-import { Toaster } from "react-hot-toast";
+import { useContext, useEffect } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import api from "./utils/axiosInstance";
+import { Toaster } from "react-hot-toast";
 import { UserContext } from "./context/UserContext";
 
 function App() {
-  const [authChecked, setAuthChecked] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const { updateUser } = useContext(UserContext);
+  const { updateUser, isAuthenticated, authChecked, setAuthChecked } =
+    useContext(UserContext);
 
   useEffect(() => {
-    const verifyAuth = async () => {
+    const initAuth = async () => {
       try {
-        const res = await api.get("/user/me", { withCredentials: true });
-        if (res.data.success) {
-          setIsAuthenticated(true);
-          updateUser(res.data.user);
-        }
-      } catch (error) {
-        console.log(error);
-        try {
-          const refreshRes = await api.get("/user/refresh-token");
-          if (refreshRes.data.success) {
-            const retryRes = await api.get("/user/me");
-            if (retryRes.data.success) {
-              setIsAuthenticated(true);
-              updateUser(retryRes.data.user);
-            }
-          } else {
-            setIsAuthenticated(false);
-          }
-        } catch {
-          setIsAuthenticated(false);
-        }
+        await api.get("/user/refresh-token", { withCredentials: true });
+        const res = await api.get("/user/me");
+        updateUser(res.data.user);
+      } catch {
+        // User is not authenticated
       } finally {
         setAuthChecked(true);
       }
     };
-    verifyAuth();
+
+    initAuth();
   }, []);
 
   if (!authChecked) return null;
+
   if (!isAuthenticated) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" replace />;
   }
 
   return (

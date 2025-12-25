@@ -239,7 +239,6 @@ const ConversationsPage = () => {
                   ?.avatar?.url;
 
                 const unreadCount = conv.unreadCount || 0;
-                console.log("unread: ", conv.unreadCount);
 
                 return (
                   <div key={conv._id}>

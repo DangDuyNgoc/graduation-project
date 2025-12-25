@@ -4,7 +4,7 @@ import { setUpInterceptors } from "@/utils/axiosInstance.js";
 
 const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-
+  const [authChecked, setAuthChecked] = useState(false);
   // update user data
   const updateUser = (userData) => {
     setUser(userData);
@@ -23,6 +23,9 @@ const UserProvider = ({ children }) => {
     <UserContext.Provider
       value={{
         user,
+        isAuthenticated: !!user,
+        authChecked,
+        setAuthChecked,
         updateUser,
         clearData,
       }}

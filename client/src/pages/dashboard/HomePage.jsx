@@ -71,32 +71,42 @@ function HomePage() {
             filteredCourses.map((course) => (
               <div
                 key={course._id}
-                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-all"
+                className="bg-white rounded-xl shadow-sm border hover:shadow-md transition-all duration-300 flex-col"
               >
+                {/* thumbnail */}
                 <img
                   src={course.thumbnail?.url || "https://placehold.co/600x400"}
                   alt={course.title}
                   className="rounded-t-xl w-full h-40 object-cover"
                 />
-                <div className="p-4">
-                  <h2 className="text-lg font-semibold text-gray-800">
+
+                {/* content */}
+                <div className="p-4 flex flex-col flex-1">
+                  <h2 className="text-lg font-semibold text-gray-800 mb-1 line-clamp-1">
                     {course.name}
                   </h2>
                   <p className="text-sm text-gray-500 mb-2">
-                    Instructor: {course.teacherId?.name || "Unknown"}
+                    Instructor:{" "}
+                    <span className="font-medium text-gray-700">
+                      {course.teacherId?.name || "Unknown"}
+                    </span>
                   </p>
-                  <div className="flex items-center mb-4">
-                    <p className="text-sm text-gray-600 flex item-center">
-                      <Users size={16} className="mr-1" />{" "}
-                      {course.studentIds?.length || 0} students enrolled
-                    </p>
-                    <span className="mx-3 w-1 h-1 bg-gray-400 rounded-full"></span>
 
-                    <p className="text-sm text-gray-600 line-clamp-2">
-                      {course.description}
-                    </p>
+                  {/* student enrolled */}
+                  <div className="flex items-center mb-3 gap-2">
+                    <Users size={16} className="text-gray-500" />
+                    <span className="px-2 py-1 text-xs bg-primary/10 text-primary rounded-full">
+                      {course.studentIds?.length || 0} students enrolled
+                    </span>
                   </div>
+
+                  {/* description */}
+                  <p className="text-sm text-gray-600 line-clamp-2 mb-4">
+                    {course.description || "No description available."}
+                  </p>
+
                   <Button
+                    className="mt-auto w-fit"
                     onClick={() => {
                       if (!course.isEnrolled) {
                         toast.error(
