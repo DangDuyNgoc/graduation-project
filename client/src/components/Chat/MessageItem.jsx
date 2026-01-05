@@ -35,10 +35,17 @@ const MessageItem = ({
           isMine ? "text-white" : "bg-gray-200 text-black"
         }`}
       >
+        {/* Edited label */}
+        {msg.isEdited && !msg.isDeleted && (
+          <div className="text-[10px] text-gray-400 mb-0.5 ml-2">Edited</div>
+        )}
+
         {/* text message */}
         {msg.isDeleted ? (
           isMine ? (
-            <p className="italic text-gray-400 text-sm border border-gray-200 rounded-full p-2">
+            <p
+              className="italic text-gray-400 text-sm border border-gray-200 rounded-full p-2"
+            >
               You deleted a message
             </p>
           ) : (

@@ -48,5 +48,5 @@ export const getTimeAgo = (timestamp) => {
     if (diffMin < 60) return `${diffMin} minutes ago`;
     if (diffHr < 24) return `${diffHr} hours ago`;
     if (diffDay === 1) return "Day ago";
-    return `${diffDay} ago`;
+    return `${diffDay} week ago`;
 }

@@ -92,18 +92,20 @@ const ProfilePage = () => {
   };
 
   if (!user) {
-    <DashboardLayout>
-      <div className="flex items-center justify-center h-screen">
-        <p className="text-gray-600">No user data available</p>
-      </div>
-    </DashboardLayout>;
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-screen">
+          <p className="text-gray-600">No user data available</p>
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (
     <DashboardLayout>
       <div className="min-h-screen flex items-center justify-center">
         <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-          {!user?.avatar?.url && (
+          {!user?.avatar?.url ? (
             <div className="flex justify-center mb-6">
               <AvatarPhoto
                 image={image}
@@ -111,16 +113,17 @@ const ProfilePage = () => {
                 onUpload={handleUploadAvatar}
               />
             </div>
+          ) : (
+            <div className="flex justify-center mb-4">
+              <AvatarPhoto
+                image={image}
+                setImage={setImage}
+                currentAvatar={user?.avatar?.url}
+                loading={loading}
+              />
+            </div>
           )}
 
-          <div className="flex justify-center mb-4">
-            <AvatarPhoto
-              image={image}
-              setImage={setImage}
-              currentAvatar={user?.avatar?.url}
-              loading={loading}
-            />
-          </div>
           <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
             {user.name || "Unnamed User"}
           </h1>

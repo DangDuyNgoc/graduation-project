@@ -307,6 +307,7 @@ export const getUserInfoController = async (req, res) => {
     }
 };
 
+// upload avatar
 export const uploadAvatarController = async (req, res) => {
     try {
         const userId = req.user?._id;
@@ -358,6 +359,7 @@ export const uploadAvatarController = async (req, res) => {
         });
     }
 };
+
 
 export const updateUserController = async (req, res) => {
     try {

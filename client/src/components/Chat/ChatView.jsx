@@ -378,6 +378,7 @@ const ChatView = ({
           setShowPicker={setShowPicker}
           pickerRef={pickerRef}
           onEmojiClick={onEmojiClick}
+          handleSendMessage={handleSendMessage}
         />
       </div>
       {lightboxImage && (

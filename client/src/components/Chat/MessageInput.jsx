@@ -1,8 +1,8 @@
 import React from "react";
 import { Input } from "../ui/input";
 import Picker from "emoji-picker-react";
-import { Paperclip, Smile, X } from "lucide-react";
-
+import { Paperclip, Send, Smile, X } from "lucide-react";
+import { Button } from "../ui/button";
 
 const MessageInput = ({
   input,
@@ -18,7 +18,9 @@ const MessageInput = ({
   setShowPicker,
   pickerRef,
   onEmojiClick,
+  handleSendMessage,
 }) => {
+  const canSend = input.trim() !== "" || selectedFile.length > 0;
   return (
     <>
       {selectedFile.length > 0 && (
@@ -80,7 +82,9 @@ const MessageInput = ({
           placeholder={
             editingMessage ? "Editing message..." : "Type message......"
           }
-          className="pl-9 pr-6 flex-1 rounded-full break-all"
+          className={`pl-9 ${
+            canSend ? "pr-12" : "pr-2"
+          } flex-1 rounded-full break-all`}
         />
         {/* cancel edit button */}
         {editingMessage && (
@@ -101,7 +105,7 @@ const MessageInput = ({
         <button
           type="button"
           onClick={() => setShowPicker((s) => !s)}
-          className="absolute right-3 top-1/2 transform -translate-y-1/2"
+          className="absolute right-8 top-1/2 transform -translate-y-1/2"
         >
           <Smile className="w-5 h-5 text-gray-600 cursor-pointer" />
         </button>
@@ -115,6 +119,13 @@ const MessageInput = ({
           >
             <Picker onEmojiClick={onEmojiClick} />
           </div>
+        )}
+
+        {/* Send Button */}
+        {canSend && (
+          <button type="button" onClick={handleSendMessage} className="absolute right-2 top-1/2 transform -translate-y-1/2 cursor-pointer">
+            <Send size={18} />
+          </button>
         )}
       </div>
     </>
