@@ -9,24 +9,28 @@ import { logError } from "../utils/logger.js";
 
 const groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// Conversation Cache
 const conversationCache = new Map();
 
-// Normalize Text
 const normalize = (text = "") => text.toLowerCase().trim();
 
-// Language Detection
+const normalizeText = (text) =>
+  (text ?? "")
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9@.+]/g, "")
+    .trim();
+
 const detectLanguage = (text = "") => {
   const vietnameseChars =
     /[àáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
   if (vietnameseChars.test(text)) return "vi";
-
   const enChars = text.replace(/[^a-zA-Z]/g, "").length;
   const viChars = text.replace(/[a-zA-Z]/g, "").length;
   return enChars >= viChars ? "en" : "vi";
 };
 
-// Conversation Context
 export const getConversationContext = async (userId, conversationId) => {
   if (conversationCache.has(userId)) return conversationCache.get(userId);
 
@@ -57,12 +61,30 @@ export const clearConversationCache = (userId) => {
   conversationCache.delete(userId);
 };
 
-// Fuzzy Search Helpers
-const fuzzyFindUser = async (name, role) => {
-  if (!name) return null;
-  const all = await UserModel.find(role ? { role } : {}).select("name role");
-  const fuse = new Fuse(all, { keys: ["name"], threshold: 0.3 });
-  const result = fuse.search(name.trim());
+const fuzzyFindUser = async (keyword, role) => {
+  if (!keyword) return null;
+
+  const users = await UserModel.find(role ? { role } : {}).select(
+    "name role email phone"
+  );
+
+  const indexedUsers = users.map((u) => ({
+    ...u.toObject(),
+    _search: {
+      name: normalizeText(u.name),
+      email: normalizeText(u.email),
+      phone: normalizeText(u.phone),
+    },
+  }));
+
+  const fuse = new Fuse(indexedUsers, {
+    keys: ["_search.name", "_search.email", "_search.phone"],
+    threshold: 0.4,
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+  });
+
+  const result = fuse.search(normalizeText(keyword));
   return result[0]?.item || null;
 };
 
@@ -89,66 +111,91 @@ const fuzzyFindAssignment = async (title) => {
   return result[0]?.item || null;
 };
 
-// Analyze Query via GPT OSS
 const analyzeQuery = async (userId, messageText, conversationId) => {
   try {
-    const { context, language } = await getConversationContext(
-      userId,
-      conversationId
-    );
+    const { context } = await getConversationContext(userId, conversationId);
 
     const prompt = `
 You are a professional bilingual study assistant (Vietnamese-English).
-Your task is to extract structured intent, entity, and filters from the user's message.
-Return strictly JSON only. Do not add any explanations or text.
-Always include all keys: "intent", "entity", "filters", "language".
-Use null for any missing or unknown values.
-If the message is small talk, greetings, thanks, or unrelated to database, return null.
-If unsure about database info, return null instead of guessing.
+
+Allowed intent values:
+- count
+- list
+- info
+
+Allowed entity values:
+- course
+- assignment
+- teacher
+- student
+- submission
+
+Return strictly JSON only.
+Always include keys: intent, entity, filters, language.
+Use null if not applicable.
+Do not invent new intent or entity names.
+
+Examples:
+- "Danh sách khóa học Python có bao nhiêu assignment?"
+{"intent":"count","entity":"assignment","filters":{"course":"Python"},"language":"vi"}
 
 Previous conversation:
 ${context}
 
 User asked: "${messageText}"
-
-EXAMPLES:
-- "Giảng viên A dạy bao nhiêu khóa học?" -> {"intent": "count", "entity": "course", "filters": {"teacher": "Giảng viên A"}, "language": "vi"}
-- "Hôm nay có bao nhiêu bài tập mới?" -> {"intent": "count", "entity": "assignment", "filters": null, "language": "vi"}
-- "Ai là giảng viên của khóa học ABC?" -> {"intent": "info", "entity": "course", "filters": {"course": "ABC"}, "language": "vi"}
-- "Tôi muốn biết danh sách sinh viên của khóa Maths 101" -> {"intent": "list", "entity": "student", "filters": {"course": "Maths 101"}, "language": "vi"}
-- "Tất cả khóa học trong hệ thống" -> {"intent": "list", "entity": "course", "filters": null, "language": "vi"}
-- "Tên tất cả bài tập trong khóa Course 01" -> {"intent":"list","entity":"assignment","filters":{"course":"Course 01"},"language":"vi"}
-- "What is the name of assignments in Course 01?" -> {"intent":"list","entity":"assignment","filters":{"course":"Course 01"},"language":"en"}
-- "Ai là giảng viên của bài tập Lab 2?" -> {"intent":"info","entity":"assignment","filters":{"assignment":"Lab 2"},"language":"vi"}
-- "List all courses" -> {"intent": "list", "entity": "course", "filters": null, "language": "en"}
-- "List all assignments" -> {"intent": "list", "entity": "assignment", "filters": null, "language": "en"}
-- "What's the submission count for Assignment X?" -> {"intent": "count", "entity": "submission", "filters": {"assignment": "Assignment X"}, "language": "en"}
-- "Which students submitted Lab 3?" -> {"intent": "list", "entity": "submission", "filters": {"assignment": "Lab 3"}, "language": "en"}
-- "Xin chào" -> null
-- "Cảm ơn, bạn nhé" -> null
-- "Hôm nay trời đẹp quá" -> null
-
-Rules:
-- Always detect language correctly: set "language" to "vi" or "en" matching the user's message.
-- Only respond in JSON, nothing else.
 `;
 
     const completion = await groqClient.chat.completions.create({
       model: "openai/gpt-oss-120b",
       messages: [
-        { role: "system", content: "You are a structured data extractor." },
+        { role: "system", content: "You extract structured JSON." },
         { role: "user", content: prompt },
       ],
       temperature: 0.2,
-      max_completion_tokens: 350,
+      max_completion_tokens: 300,
     });
 
     const text = completion.choices[0]?.message?.content || "{}";
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
+
     const parsed = JSON.parse(match[0]);
 
-    console.log("Parsed query:", parsed);
+    const entityMap = {
+      "khóa học": "course",
+      "môn học": "course",
+      course: "course",
+      "bài tập": "assignment",
+      assignment: "assignment",
+      "giảng viên": "teacher",
+      instructor: "teacher",
+      teacher: "teacher",
+      "sinh viên": "student",
+      student: "student",
+      "bài nộp": "submission",
+      submission: "submission",
+    };
+
+    if (parsed.entity) {
+      const key = normalize(parsed.entity);
+      parsed.entity = entityMap[key] || parsed.entity;
+    }
+
+    if (parsed.filters) {
+      if (parsed.filters.instructor && !parsed.filters.teacher) {
+        parsed.filters.teacher = parsed.filters.instructor;
+        delete parsed.filters.instructor;
+      }
+      if (parsed.filters.giang_vien && !parsed.filters.teacher) {
+        parsed.filters.teacher = parsed.filters.giang_vien;
+        delete parsed.filters.giang_vien;
+      }
+      if (parsed.filters?.name && !parsed.filters.teacher) {
+        parsed.filters.teacher = parsed.filters.name;
+        delete parsed.filters.name;
+      }
+    }
+
     return parsed;
   } catch (err) {
     logError(err);
@@ -156,256 +203,104 @@ Rules:
   }
 };
 
-// Query MongoDB Based on Parsed JSON
-const queryDB = async (parsed, detectedLang = "en") => {
+const queryDB = async (parsed) => {
   if (!parsed) return null;
-  const { intent, entity, filters, language } = parsed;
-  const lang = language || detectedLang;
-  const t = (vi, en) => (lang === "vi" ? vi : en || vi);
+
+  const { intent, entity, filters } = parsed;
 
   try {
-    // count/info queries
     if (intent === "count" || intent === "info") {
-      if ((entity === "course" || entity === "teacher") && filters?.teacher) {
+      if (intent === "info" && entity === "teacher" && filters?.teacher) {
         const teacher = await fuzzyFindUser(filters.teacher, "TEACHER");
-        if (!teacher)
-          return t(
-            `Không tìm thấy giảng viên ${filters.teacher}.`,
-            `Teacher ${filters.teacher} not found.`
-          );
-        const courseCount = await CourseModel.countDocuments({
-          teacherId: teacher._id,
-        });
-        return t(
-          `Giảng viên ${teacher.name} có ${courseCount} khóa học.`,
-          `Teacher ${teacher.name} has ${courseCount} courses.`
-        );
+        if (!teacher) return null;
+        return {
+          type: "TEACHER_INFO",
+          data: {
+            name: teacher.name,
+            email: teacher.email ?? null,
+            phone: teacher.phone ?? null,
+          },
+        };
       }
 
-      if (
-        entity === "course" &&
-        (!filters || Object.keys(filters).length === 0)
-      ) {
-        const totalCourses = await CourseModel.countDocuments({});
-        return t(
-          `Hiện có tổng cộng ${totalCourses} khóa học trong hệ thống.`,
-          `There are currently ${totalCourses} courses in the system.`
-        );
+      if ((entity === "course" || entity === "teacher") && filters?.teacher) {
+        const teacher = await fuzzyFindUser(filters.teacher, "TEACHER");
+        if (!teacher) return null;
+        const count = await CourseModel.countDocuments({
+          teacherId: teacher._id,
+        });
+        return {
+          type: "COUNT_COURSE_BY_TEACHER",
+          data: { teacher: teacher.name, count },
+        };
+      }
+
+      if (entity === "course" && !filters) {
+        const count = await CourseModel.countDocuments({});
+        return { type: "COUNT_ALL_COURSES", data: { count } };
       }
 
       if (entity === "assignment") {
-        if (!filters?.course && !filters?.assignment) {
-          const assignmentCount = await AssignmentModel.countDocuments({});
-          return t(
-            `Hiện có tổng cộng ${assignmentCount} bài tập trong hệ thống.`,
-            `There are currently ${assignmentCount} assignments in the system.`
-          );
+        if (!filters) {
+          const count = await AssignmentModel.countDocuments({});
+          return { type: "COUNT_ALL_ASSIGNMENTS", data: { count } };
         }
-        if (filters?.course) {
-          const course = await fuzzyFindCourse(filters.course);
-          if (!course)
-            return t(
-              `Khóa học ${filters.course} không tồn tại.`,
-              `Course ${filters.course} not found.`
-            );
-          const assignmentCount = await AssignmentModel.countDocuments({
-            courseId: course._id,
-          });
-          return t(
-            `Khóa học ${course.name} có ${assignmentCount} bài tập.`,
-            `Course ${course.name} has ${assignmentCount} assignments.`
-          );
-        }
-        if (filters?.assignment) {
-          const assignment = await fuzzyFindAssignment(filters.assignment);
-          if (!assignment)
-            return t(
-              `Bài tập ${filters.assignment} không tồn tại.`,
-              `Assignment ${filters.assignment} not found.`
-            );
-          const teacherName = assignment.courseId?.teacherId?.name;
-          return t(
-            `Bài tập "${assignment.title}" thuộc khóa học ${
-              assignment.courseId?.name
-            }${teacherName ? `, giảng viên ${teacherName}` : ""}.`,
-            `Assignment "${assignment.title}" belongs to course ${
-              assignment.courseId?.name
-            }${teacherName ? `, teacher ${teacherName}` : ""}.`
-          );
-        }
-      }
-
-      if (entity === "submission") {
-        if (!filters?.assignment)
-          return t(
-            `Cần chỉ định bài tập để đếm lượt nộp.`,
-            `Assignment must be specified to count submissions.`
-          );
-        const assignment = await fuzzyFindAssignment(filters.assignment);
-        if (!assignment)
-          return t(
-            `Bài tập ${filters.assignment} không tồn tại.`,
-            `Assignment ${filters.assignment} not found.`
-          );
 
         if (filters.course) {
           const course = await fuzzyFindCourse(filters.course);
-          if (!course)
-            return t(
-              `Khóa học ${filters.course} không tồn tại.`,
-              `Course ${filters.course} not found.`
-            );
-          if (assignment.courseId._id.toString() !== course._id.toString()) {
-            return t(
-              `Bài tập ${assignment.title} không thuộc khóa học ${course.name}.`,
-              `Assignment ${assignment.title} does not belong to course ${course.name}.`
-            );
-          }
-        }
-
-        const submissionCount = await SubmissionModel.countDocuments({
-          assignment: assignment._id,
-        });
-        return t(
-          `Bài tập "${assignment.title}" có ${submissionCount} lượt nộp.`,
-          `Assignment "${assignment.title}" has ${submissionCount} submissions.`
-        );
-      }
-
-      if (entity === "student" && filters?.course) {
-        const course = await fuzzyFindCourse(filters.course);
-        if (!course)
-          return t(
-            `Khóa học ${filters.course} không tồn tại.`,
-            `Course ${filters.course} not found.`
-          );
-        return t(
-          `Có ${course.studentIds.length} sinh viên trong khóa học ${course.name}.`,
-          `There are ${course.studentIds.length} students in course ${course.name}.`
-        );
-      }
-    }
-
-    // LIST queries
-    if (intent === "list") {
-      if (entity === "assignment") {
-        if (filters?.course) {
-          const course = await fuzzyFindCourse(filters.course);
-          if (!course)
-            return t(
-              `Khóa học ${filters.course} không tồn tại.`,
-              `Course ${filters.course} not found.`
-            );
-          const assignments = await AssignmentModel.find({
+          if (!course) return null;
+          const count = await AssignmentModel.countDocuments({
             courseId: course._id,
           });
-          const list = assignments
-            .map((a, i) => `${i + 1}. ${a.title}`)
-            .join("\n");
-          return t(
-            `Danh sách bài tập trong khóa học ${course.name}:\n${list}`,
-            `Assignments in course ${course.name}:\n${list}`
-          );
+          return {
+            type: "COUNT_ASSIGNMENT_BY_COURSE",
+            data: { course: course.name, count },
+          };
         }
-        if (!filters || Object.keys(filters).length === 0) {
-          const assignments = await AssignmentModel.find();
-          const list = assignments
-            .map((a, i) => `${i + 1}. ${a.title}`)
-            .join("\n");
-          return t(
-            `Danh sách tất cả các bài tập:\n${list}`,
-            `List of all assignments:\n${list}`
-          );
-        }
-      }
-
-      if (entity === "course") {
-        if (filters?.teacher) {
-          const teacher = await fuzzyFindUser(filters.teacher, "TEACHER");
-          if (!teacher)
-            return t(
-              `Không tìm thấy giảng viên ${filters.teacher}.`,
-              `Teacher ${filters.teacher} not found.`
-            );
-          const courses = await CourseModel.find({ teacherId: teacher._id });
-          const list = courses
-            .map(
-              (c, i) =>
-                `${i + 1}. ${c.name} - ${c.description || "No description"}`
-            )
-            .join("\n");
-          return t(
-            `Các khóa học của giảng viên ${teacher.name}:\n${list}`,
-            `Courses of teacher ${teacher.name}:\n${list}`
-          );
-        }
-        if (!filters || Object.keys(filters).length === 0) {
-          const courses = await CourseModel.find();
-          const list = courses.map((c, i) => `${i + 1}. ${c.name}`).join("\n");
-          return t(
-            `Danh sách tất cả các khóa học:\n${list}`,
-            `List of all courses:\n${list}`
-          );
-        }
-      }
-
-      if (entity === "student" && filters?.course) {
-        const course = await fuzzyFindCourse(filters.course);
-        if (!course)
-          return t(
-            `Khóa học ${filters.course} không tồn tại.`,
-            `Course ${filters.course} not found.`
-          );
-        if (filters.student) {
-          const student = course.studentIds.find(
-            (s) => normalize(s.name) === normalize(filters.student)
-          );
-          return student
-            ? t(
-                `Sinh viên ${student.name} có trong khóa học ${course.name}.`,
-                `Student ${student.name} is enrolled in ${course.name}.`
-              )
-            : t(
-                `Sinh viên ${filters.student} không có trong khóa học ${course.name}.`,
-                `Student ${filters.student} is not enrolled in ${course.name}.`
-              );
-        }
-        return t(
-          `Có ${course.studentIds.length} sinh viên trong khóa học ${course.name}.`,
-          `There are ${course.studentIds.length} students in course ${course.name}.`
-        );
       }
 
       if (entity === "submission" && filters?.assignment) {
         const assignment = await fuzzyFindAssignment(filters.assignment);
-        if (!assignment)
-          return t(
-            `Bài tập ${filters.assignment} không tồn tại.`,
-            `Assignment ${filters.assignment} not found.`
-          );
-        const submissions = await SubmissionModel.find({
+        if (!assignment) return null;
+        const count = await SubmissionModel.countDocuments({
           assignment: assignment._id,
         });
-        const list = submissions
-          .map((s, i) => `${i + 1}. ${s.studentName || "Unknown"}`)
-          .join("\n");
-        return t(
-          `Danh sách lượt nộp bài tập "${assignment.title}":\n${list}`,
-          `Submission list for assignment "${assignment.title}":\n${list}`
-        );
+        return {
+          type: "COUNT_SUBMISSION",
+          data: { assignment: assignment.title, count },
+        };
+      }
+
+      if (entity === "student" && filters?.course) {
+        const course = await fuzzyFindCourse(filters.course);
+        if (!course) return null;
+        return {
+          type: "COUNT_STUDENT_BY_COURSE",
+          data: { course: course.name, count: course.studentIds.length },
+        };
       }
     }
 
-    // Assignment guidance
-    if (
-      intent === "assignment_guidance" &&
-      entity === "assignment" &&
-      filters?.assignment
-    ) {
-      return t(
-        `Bạn có thể thử giải bài tập "${filters.assignment}" bằng cách phân tích yêu cầu và áp dụng kiến thức đã học.`,
-        `You can try solving assignment "${filters.assignment}" by analyzing the requirements and applying learned concepts.`
-      );
+    if (intent === "list") {
+      if (entity === "assignment" && filters?.course) {
+        const course = await fuzzyFindCourse(filters.course);
+        if (!course) return null;
+        const assignments = await AssignmentModel.find({
+          courseId: course._id,
+        }).select("title");
+        return {
+          type: "LIST_ASSIGNMENT_BY_COURSE",
+          data: {
+            course: course.name,
+            assignments: assignments.map((a) => a.title),
+          },
+        };
+      }
+
+      if (entity === "course") {
+        const courses = await CourseModel.find().select("name description");
+        return { type: "LIST_ALL_COURSES", data: courses };
+      }
     }
 
     return null;
@@ -415,56 +310,64 @@ const queryDB = async (parsed, detectedLang = "en") => {
   }
 };
 
-// Main Chatbot Reply Function
+const generateAnswer = async (structuredData, language) => {
+  if (!structuredData) return null;
+
+  const prompt = `
+Language: ${language}
+Data:
+${JSON.stringify(structuredData, null, 2)}
+`;
+
+  const completion = await groqClient.chat.completions.create({
+    model: "openai/gpt-oss-120b",
+    messages: [
+      { role: "system", content: "Generate user-friendly answer." },
+      { role: "user", content: prompt },
+    ],
+    temperature: 0.4,
+    max_completion_tokens: 300,
+  });
+
+  return completion.choices[0]?.message?.content || null;
+};
+
 export const getChatbotReply = async (userId, conversationId, messageText) => {
   try {
     const userLang = detectLanguage(messageText);
 
-    // Extract structured intent/entity/filters
     const parsed = await analyzeQuery(userId, messageText, conversationId);
+    console.log("Parsed Query:", parsed);
 
-    // Query database for structured answers
-    const dbReply = await queryDB(parsed, userLang);
-    if (dbReply) return dbReply;
+    const dbResult = await queryDB(parsed);
+    console.log("DB Result:", dbResult);
 
-    // Fallback GPT for guidance / small talk
+    if (dbResult) {
+      const answer = await generateAnswer(dbResult, userLang);
+      if (answer) return answer;
+    }
+
     const { context } = await getConversationContext(userId, conversationId);
-    const prompt = `
+
+    const fallbackPrompt = `
 ${context}
 User asked: "${messageText}"
-
-Rules:
-- Never provide direct answers to assignments.
-- Only give hints, guidance, or explanations.
-- If the question is about system data and unknown, reply "I don't know".
-- Answer concisely in ${userLang === "vi" ? "Vietnamese" : "English"}.
 `;
 
     const fallbackResp = await groqClient.chat.completions.create({
       model: "openai/gpt-oss-120b",
       messages: [
-        {
-          role: "system",
-          content:
-            "You are a helpful study assistant. Answer clearly and concisely.",
-        },
-        { role: "user", content: prompt },
+        { role: "system", content: "Helpful study assistant." },
+        { role: "user", content: fallbackPrompt },
       ],
       temperature: 0.3,
       max_completion_tokens: 250,
     });
 
-    const textResp = fallbackResp.choices[0]?.message?.content;
-
-    if (!textResp)
-      return userLang === "vi"
-        ? "Xin lỗi, tôi không thể trả lời câu hỏi này."
-        : "Sorry, I cannot answer this question.";
-
-    return textResp;
+    return fallbackResp.choices[0]?.message?.content || null;
   } catch (err) {
     logError(err);
-    return userLang === "vi"
+    return detectLanguage(messageText) === "vi"
       ? "Lỗi nội bộ Chatbot."
       : "Chatbot internal error.";
   }

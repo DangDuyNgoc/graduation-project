@@ -81,10 +81,10 @@ export default function TeachersSubmissionPage() {
                     <td className="p-3">{sub.assignment?.title}</td>
                     <td className="p-3">
                       <span
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        className={`py-1 rounded-full text-xs font-medium ${
                           sub.status === "Submitted"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-200 text-gray-700"
+                            ? "text-green-700"
+                            : "text-gray-700"
                         }`}
                       >
                         {sub.status}
