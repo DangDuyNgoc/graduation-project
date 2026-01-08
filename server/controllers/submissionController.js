@@ -757,10 +757,6 @@ export const verifySubmissionBlockchainController = async (req, res) => {
     const assignmentId = submission.assignment._id.toString();
     const contentHash = submission.contentHash;
 
-    console.log("studentId:", studentId);
-    console.log("assignmentId:", assignmentId);
-    console.log("contentHash:", contentHash);
-
     if (!contentHash) {
       return res.status(400).send({
         success: false,
@@ -769,12 +765,26 @@ export const verifySubmissionBlockchainController = async (req, res) => {
     };
 
     // call smart contract
-    const isValid = await contract.verifySubmission(studentId, assignmentId, contentHash);
+    const result = await contract.verifySubmission(
+      studentId,
+      assignmentId,
+      contentHash
+    );
+
+    // ethers.js trả về array-like
+    const isValid = result[0]; // bool
+    const returnedAssignmentId = result[1];
+    const returnedContentHash = result[2];
+    const status = result[3];
+
 
     return res.status(200).send({
       success: true,
       message: "Verify submission on blockchain successfully",
-      isValid
+      isValid,
+      status,
+      returnedAssignmentId,
+      returnedContentHash
     });
   } catch (error) {
     console.log("Error in verify submission on blockchain: ", error);
