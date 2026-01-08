@@ -184,12 +184,14 @@ export const uploadSubmissionController = async (req, res) => {
 
     // send email notification
     try {
+      const emailUser = await userModel.findById(req.user._id);
+      console.log(emailUser);
       await sendEmail({
-        email: req.user.email,
+        email: emailUser.email,
         subject: "Submission Uploaded Successfully",
         template: "submission_success.ejs",
         data: {
-          name: req.user.name,
+          name: emailUser.name,
           assignments: assignment.title,
           courseName: course.name,
           isLate: isLate,

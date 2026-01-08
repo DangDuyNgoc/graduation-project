@@ -204,21 +204,13 @@ export default function TeacherSubmissionStudentPage() {
                   className={`font-semibold ${
                     report.similarityScore >= 0.8
                       ? "text-red-700"
-                      : report.similarityScore >= 0.65
-                      ? "text-orange-600"
-                      : report.similarityScore >= 0.5
-                      ? "text-yellow-600"
                       : "text-green-600"
                   }`}
                 >
                   {(report.similarityScore * 100).toFixed(2)}% -{" "}
-                  {report.similarityScore >= 0.85
-                    ? "High similarity (possible serious copying)"
-                    : report.similarityScore >= 0.7
-                    ? "Medium similarity (noticeable copying)"
-                    : report.similarityScore >= 0.5
-                    ? "Low similarity (minor overlap)"
-                    : "Safe (minimal similarity)"}
+                  {report.similarityScore >= 0.8
+                    ? "High similarity detected"
+                    : "No significant similarity detected"}
                 </span>
               </p>
 
@@ -270,15 +262,26 @@ export default function TeacherSubmissionStudentPage() {
                             >
                               {(match.similarity * 100).toFixed(1)}% -{" "}
                               {match.similarity * 100 >= 90
-                                ? "High similarity"
+                                ? "High"
                                 : match.similarity * 100 >= 80
-                                ? "Medium similarity"
+                                ? "Medium"
                                 : match.similarity * 100 >= 50
-                                ? "Low similarity"
+                                ? "Low"
                                 : "Safe"}
                             </span>{" "}
                             | Source:{" "}
-                            <span className="italic">{match.sourceType}</span>
+                            <span className="italic">{match.sourceType}</span> |{" "}
+                            {match.sourceType === "external" &&
+                              match.sourceId && (
+                                <a
+                                  href={match.sourceId}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline break-all"
+                                >
+                                  {match.sourceId}
+                                </a>
+                              )}
                           </p>
                         </li>
                       ))}
