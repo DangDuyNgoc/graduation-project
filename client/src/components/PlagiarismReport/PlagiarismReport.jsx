@@ -11,7 +11,7 @@ function PlagiarismReport() {
   const { id } = useParams();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [threshold] = useState(0.6);
+  const [threshold] = useState(0.8);
   const navigate = useNavigate();
 
   const fetchReport = async () => {
