@@ -223,6 +223,62 @@ const queryDB = async (parsed) => {
         };
       }
 
+      if (intent === "info" && entity === "course" && filters?.course) {
+        const course = await fuzzyFindCourse(filters.course);
+        if (!course) {
+          return {
+            type: "COURSE_NOT_FOUND",
+            data: { keyword: filters.course },
+          };
+        }
+
+        return {
+          type: "COURSE_INFO",
+          data: {
+            name: course.name,
+            description: course.description ?? null,
+            teacher: course.teacherId?.name ?? null,
+            studentCount: course.studentIds?.length ?? 0,
+          },
+        };
+      }
+
+      if (intent === "info" && entity === "assignment" && filters?.assignment) {
+        const assignment = await fuzzyFindAssignment(filters.assignment);
+        if (!assignment) return null;
+
+        return {
+          type: "ASSIGNMENT_INFO",
+          data: {
+            title: assignment.title,
+            course: assignment.courseId?.name ?? null,
+            createdBy: assignment.createdBy?.name ?? null,
+            deadline: assignment.deadline ?? null,
+          },
+        };
+      }
+
+      if (intent === "list" && entity === "student" && filters?.course) {
+        const course = await fuzzyFindCourse(filters.course);
+        if (!course) return null;
+
+        return {
+          type: "LIST_STUDENT_BY_COURSE",
+          data: {
+            course: course.name,
+            students: course.studentIds.map((s) => s.name),
+          },
+        };
+      }
+
+      if (intent === "list" && entity === "assignment" && !filters) {
+        const assignments = await AssignmentModel.find().select("title");
+        return {
+          type: "LIST_ALL_ASSIGNMENTS",
+          data: assignments.map((a) => a.title),
+        };
+      }
+
       if ((entity === "course" || entity === "teacher") && filters?.teacher) {
         const teacher = await fuzzyFindUser(filters.teacher, "TEACHER");
         if (!teacher) return null;
@@ -297,6 +353,16 @@ const queryDB = async (parsed) => {
         };
       }
 
+      if (intent === "list" && entity === "teacher") {
+        const teachers = await UserModel.find({ role: "TEACHER" }).select(
+          "name email"
+        );
+        return {
+          type: "LIST_TEACHERS",
+          data: teachers,
+        };
+      }
+
       if (entity === "course") {
         const courses = await CourseModel.find().select("name description");
         return { type: "LIST_ALL_COURSES", data: courses };
@@ -314,18 +380,24 @@ const generateAnswer = async (structuredData, language) => {
   if (!structuredData) return null;
 
   const prompt = `
+You are a database-grounded response generator.
+
+Rules:
+- Use ONLY the information explicitly present in the provided data.
+- Do NOT add assumptions or external knowledge.
+- Do NOT invent course descriptions, levels, or purposes.
+- If data is missing, state that it is unavailable.
+
 Language: ${language}
+
 Data:
 ${JSON.stringify(structuredData, null, 2)}
 `;
 
   const completion = await groqClient.chat.completions.create({
     model: "openai/gpt-oss-120b",
-    messages: [
-      { role: "system", content: "Generate user-friendly answer." },
-      { role: "user", content: prompt },
-    ],
-    temperature: 0.4,
+    messages: [{ role: "system", content: prompt }],
+    temperature: 0,
     max_completion_tokens: 300,
   });
 
