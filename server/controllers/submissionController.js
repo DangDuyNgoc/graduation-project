@@ -793,4 +793,74 @@ export const verifySubmissionBlockchainController = async (req, res) => {
       message: "Internal server error"
     });
   }
-} 
+}
+
+export const overwriteSubmissionMaterialController = async (req, res) => {
+  try {
+    const { submissionId, materialIndex = 0 } = req.params;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
+    }
+
+    const submission = await submissionModel.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        message: "Submission not found",
+      });
+    }
+
+    const index = Number(materialIndex);
+    const materialId = submission.materials[index];
+
+    if (!materialId) {
+      return res.status(400).json({
+        success: false,
+        message: "Material not found",
+      });
+    }
+
+    // get materialId from flask
+    const { data } = await axios.get(
+      `http://localhost:5000/demo-materials/${materialId}`
+    );
+
+
+
+    if (!data.success || !data.material?.s3_key) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to resolve S3 key from material service",
+      });
+    }
+
+    const s3Key = data.material.s3_key;
+
+    // overwrite S3 object
+    await putObject(
+      file.buffer,
+      s3Key, // SAME KEY
+      file.mimetype
+    );
+
+    submission.contentHash =  Date.now();
+    await submission.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "File re-uploaded and overwritten on S3 (demo)",
+      s3Key,
+    });
+  } catch (error) {
+    console.log("Error in overwrite submission material: ", error);
+    return res.status(500).send({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+}

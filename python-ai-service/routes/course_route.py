@@ -388,3 +388,40 @@ def delete_all_courses():
 
     finally:
         conn.close()
+
+
+# demo
+@course_bp.route("/demo-materials/<int:material_id>", methods=["GET"])
+def get_material_by_id(material_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            """
+            SELECT id, title, s3_url, s3_key, fileType, courseId, submissionId, ownerType
+            FROM materials
+            WHERE id = ?
+            """,
+            (material_id,),
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            return jsonify({"success": False, "message": "Material not found"}), 404
+
+        return jsonify({
+            "success": True,
+            "material": {
+                "id": row[0],
+                "title": row[1],
+                "s3_url": row[2],
+                "s3_key": row[3],
+                "fileType": row[4],
+                "courseId": row[5],
+                "submissionId": row[6],
+                "ownerType": row[7],
+            }
+        })
+    finally:
+        conn.close()

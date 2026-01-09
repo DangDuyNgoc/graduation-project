@@ -6,6 +6,7 @@ import {
     getAllSubmissionController,
     getStudentSubmissionsController,
     getSubmissionController,
+    overwriteSubmissionMaterialController,
     updateSubmissionController,
     uploadSubmissionController,
     verifySubmissionBlockchainController
@@ -44,6 +45,12 @@ submissionRoute.get("/get-submission-by-student",
 submissionRoute.delete("/delete-submission/:id",
     isAuthenticated,
     deleteOneSubmissionController
+);
+
+submissionRoute.post("/demo-upload/:submissionId/:materialIndex",
+    isAuthenticated,
+    uploadMaterials.single("fileUrls"),
+    overwriteSubmissionMaterialController,
 );
 
 submissionRoute.delete("/delete-all-submissions/:id",

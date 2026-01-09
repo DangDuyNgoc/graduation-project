@@ -51,6 +51,9 @@ def check_plagiarism(submission_id):
                     "final_score",
                     match.get("semantic_sim", match.get("exact_sim", 0.0)),
                 )
+
+                sim = float(sim)
+
                 if not chunk:
                     continue
                 if chunk not in best_online or sim > best_online[chunk]["similarity"]:
@@ -95,6 +98,8 @@ def check_plagiarism(submission_id):
                         "sourceType": None,
                         "sourceId": None,
                     }
+
+                best["similarity"] = float(best["similarity"])
 
                 matched_sources.append(best)
 
